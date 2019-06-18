@@ -18,7 +18,6 @@ class View(nn.Module):
         self.size = size
 
     def forward(self, tensor):
-        print(tensor.shape)
         return tensor.view(self.size)
 
 
@@ -27,9 +26,9 @@ class conv_VAE(nn.Module):
         super(conv_VAE, self).__init__()
         self.nc = nc
         self.z_dim = z_dim
-        #assume initial size is 60 x 60 
+        #assume initial size is 64 x 64 
         self.encoder = nn.Sequential(
-            nn.Conv2d(nc, 32, 3, 2, 3),          # B,  32, 32, 32
+            nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 32, 32
             nn.ReLU(True),
             nn.Conv2d(32, 32, 4, 2, 1),          # B,  32, 16, 16
             nn.ReLU(True),
@@ -59,7 +58,7 @@ class conv_VAE(nn.Module):
             nn.ReLU(True),
             nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32, 32, 32
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, nc, 3, 2, 3, output_padding=1), # B,  nc, 60, 60
+            nn.ConvTranspose2d(32, nc, 4, 2, 1), # B,  nc, 64, 64
         )
         self.weight_init()
         
@@ -74,7 +73,6 @@ class conv_VAE(nn.Module):
         logvar = distributions[:, self.z_dim:]
         z = reparametrize(mu, logvar)
         x_recon = self._decode(z)
-        print(x_recon.shape)
         x_recon = x_recon.view(x.size())
         return x_recon, mu, logvar
 

@@ -1,45 +1,58 @@
-import pickle
+import os
 import numpy as np
+import pickle
+
 import torch
-from torch.utils.data.dataset import Dataset
+from torch.utils.data import Dataset, DataLoader
+from torchvision.datasets import ImageFolder, DatasetFolder
+from torchvision import transforms
+
+import matplotlib.pyplot as plt
+import random
+from PIL import Image
 
 
-class ImageData(Dataset):
-    def __init__(self, FILENAME, mode='train'):
-        # download pickle file of images
-        images_dict = pickle.load(open( "{}/images_dict.p".format(FILENAME), "rb" ) )
-        fulldatasize = int(images_dict["images"].shape[0]/2)
-        training_size = int(fulldatasize*0.99)
-        test_size = int(fulldatasize - training_size)
-        self.mode = mode
-        self.x_train = images_dict["images"][np.arange(0, 2*training_size, step=2),:,:,0]
-        self.y_train = images_dict["images"][np.arange(1, 2*training_size, step=2),:,:,0]
-        self.x_test = images_dict["images"][np.arange(2*training_size,2*fulldatasize, step=2),:,:,0]
-        self.y_test = images_dict["images"][np.arange(2*training_size+1, 2*fulldatasize, step=2),:,:,0]
-        
-        self.x_train = self.x_train/self.x_train[0].max()
-        self.y_train = self.x_train/self.y_train[0].max()
-        self.x_test = self.x_train/self.x_test[0].max()
-        self.y_test = self.x_train/self.y_test[0].max()
+
+def pil_loader(path):
+    # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
+    with open(path, 'rb') as f:
+        img = Image.open(f)
+        return img.convert('RGB')
 
 
-    # Override to give PyTorch access to any image on the dataset
-    def __getitem__(self, index, mode='train'):
-        if mode =='train':
-            img = torch.from_numpy(self.x_train[index,:,:]).unsqueeze(0).float()
-            label = torch.from_numpy(self.y_train[index,:,:]).unsqueeze(0).float()
-        elif mode =='test':
-            img = torch.from_numpy(self.x_test[index,:,:]).unsqueeze(0).float()
-            label = torch.from_numpy(self.y_test[index,:,:]).unsqueeze(0).float()
-        else:
-            return(print("Incorrect mode: enter train or test"))
+def accimage_loader(path):
+    import accimage
+    try:
+        return accimage.Image(path)
+    except IOError:
+        # Potentially a decoding problem, fall back to PIL.Image
+        return pil_loader(path)
 
-        return img, label
 
-    # Override to give PyTorch size of dataset
-    def __len__(self, mode='train'):
-        if mode =='train':
-            return len(self.x_train)
-        else:
-            return len(self.x_test)
+def default_loader(path):
+    from torchvision import get_image_backend
+    if get_image_backend() == 'accimage':
+        return accimage_loader(path)
+    else:
+        return pil_loader(path)
     
+class MyDataset(Dataset):
+    def __init__(self,image_paths, target_paths, image_size = 64 ):
+        self.image_paths = image_paths
+        self.target_paths = target_paths
+        self.image_size = image_size
+    def __getitem__(self, index):
+        x_sample = default_loader(self.image_paths+ os.listdir(self.image_paths)[index])
+        y_sample = default_loader(self.target_paths+os.listdir(self.target_paths)[index])
+
+        transform = transforms.Compose([
+            transforms.Resize((self.image_size, self.image_size)),
+            transforms.Grayscale(),
+            transforms.ToTensor(),])
+        x = transform(x_sample)
+        y = transform(y_sample)
+        
+        return x, y
+
+    def __len__(self):
+        return len(self.image_paths)
