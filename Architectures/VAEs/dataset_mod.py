@@ -10,14 +10,16 @@ from torchvision import transforms
 import matplotlib.pyplot as plt
 import random
 from PIL import Image
+import PIL
 
-
+#https://discuss.pytorch.org/t/custom-image-dataset-for-autoencoder/16118/2
+#https://discuss.pytorch.org/t/torchvision-transfors-how-to-perform-identical-transform-on-both-image-and-target/10606/7
 
 def pil_loader(path):
     # open path as file to avoid ResourceWarning (https://github.com/python-pillow/Pillow/issues/835)
     with open(path, 'rb') as f:
         img = Image.open(f)
-        return img.convert('RGB')
+        return img.convert('L')
 
 
 def accimage_loader(path):
@@ -42,12 +44,12 @@ class MyDataset(Dataset):
         self.target_paths = target_paths
         self.image_size = image_size
     def __getitem__(self, index):
-        x_sample = default_loader(self.image_paths+ os.listdir(self.image_paths)[index])
-        y_sample = default_loader(self.target_paths+os.listdir(self.target_paths)[index])
+        x_sample = default_loader(self.image_paths+ sorted(os.listdir(self.image_paths))[index])
+        y_sample = default_loader(self.target_paths+ sorted(os.listdir(self.target_paths))[index])
 
         transform = transforms.Compose([
-            transforms.Resize((self.image_size, self.image_size)),
-            transforms.Grayscale(),
+            transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
+            #transforms.Grayscale(),
             transforms.ToTensor(),])
         x = transform(x_sample)
         y = transform(y_sample)
@@ -55,4 +57,4 @@ class MyDataset(Dataset):
         return x, y
 
     def __len__(self):
-        return len(self.image_paths)
+        return len(os.listdir(self.image_paths))

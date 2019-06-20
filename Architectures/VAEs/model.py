@@ -58,7 +58,8 @@ class conv_VAE(nn.Module):
             nn.ReLU(True),
             nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32, 32, 32
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, nc, 4, 2, 1), # B,  nc, 64, 64
+            nn.ConvTranspose2d(32, nc, 4, 2, 1),
+            nn.Sigmoid()   # B,  nc, 64, 64
         )
         self.weight_init()
         

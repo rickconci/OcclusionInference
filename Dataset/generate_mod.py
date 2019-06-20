@@ -92,9 +92,18 @@ def sample_clutter(**kwargs):
     char_opt['fontsize'] = fontsize
     for i in range(n_letters):
         char_opt['identity'] = characters[i]
-        char_opt['face_colour'] = face_colour_set[i] #can sample from face colour set 
-        char_opt['edge_colour'] = face_colour_set[i] #can sample form edge colour set
+        
         char_opt['font'] = random.choice(font_set)
+        if i ==0:
+            char_opt['face_colour'] = random.choice(face_colour_set) #can sample from face colour set 
+            char_opt['edge_colour'] = char_opt['face_colour'] #can sample form edge colour set
+        elif i==1:
+            face_colour = []
+            face_colour.append(char_opt['face_colour'])
+            face_colour = np.array(face_colour)
+            face_colour.flatten()
+            char_opt['face_colour'] = abs([255, 255, 255, 0] - face_colour[0]) #can sample from face colour set 
+            char_opt['edge_colour'] = char_opt['face_colour'] #can sample form edge colour set
 
         # Sample the offset
         if tuple(offset_cov) == ((0, 0), (0, 0)):

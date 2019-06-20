@@ -102,11 +102,18 @@ class Clutter:
         # Add a thread limit if necessary
         if thread_limit is not None:
             image_cmd += ' -limit thread {0}'.format(thread_limit)
+            
+        filename = os.path.abspath(fname+'.bmp')
+        directory = os.path.dirname(filename)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
         # Submit the image command
         shlex_cmd(image_cmd)
+        
 
         if not os.path.exists(fname+'.bmp'):
+            
             raise FileNotFoundError('Image {0} failed to render with the following command.\n\
             {1}'.format(fname+'.bmp', image_cmd))
                     
