@@ -21,9 +21,9 @@ class View(nn.Module):
         return tensor.view(self.size)
 
 
-class conv_VAE(nn.Module):
+class conv_VAE_64(nn.Module):
     def __init__(self, z_dim=10, nc=1):
-        super(conv_VAE, self).__init__()
+        super(conv_VAE_64, self).__init__()
         self.nc = nc
         self.z_dim = z_dim
         #assume initial size is 64 x 64 
@@ -59,7 +59,7 @@ class conv_VAE(nn.Module):
             nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32, 32, 32
             nn.ReLU(True),
             nn.ConvTranspose2d(32, nc, 4, 2, 1),
-            nn.Sigmoid()   # B,  nc, 64, 64
+            #nn.Sigmoid()   # B,  nc, 64, 64
         )
         self.weight_init()
         
@@ -83,6 +83,68 @@ class conv_VAE(nn.Module):
     def _decode(self, z):
         return self.decoder(z)
 
+    
+class conv_VAE_32(nn.Module):
+    def __init__(self, z_dim=10, nc=1):
+        super(conv_VAE_32, self).__init__()
+        self.nc = nc
+        self.z_dim = z_dim
+        #assume initial size is 64 x 64 
+        self.encoder = nn.Sequential(
+            #nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 32, 32
+            #nn.ReLU(True),
+            nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 16, 16
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),          # B,  32,  8,  8
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 4, 2, 1),          # B,  32,  4,  4
+            nn.ReLU(True),
+            View((-1, 32*4*4)),                  # B, 512
+            nn.Linear(32*4*4, 256),              # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, 256),                 # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, z_dim*2),             # B, z_dim*2
+        )
+
+        self.decoder = nn.Sequential(
+            nn.Linear(z_dim, 256),               # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, 256),                 # B, 256
+            nn.ReLU(True),
+            nn.Linear(256, 32*4*4),              # B, 512
+            nn.ReLU(True),
+            View((-1, 32, 4, 4)),                # B,  32,  4,  4
+            nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32,  8,  8
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32, 16, 16
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, nc, 4, 2, 1), # B,  32, 32, 32
+            #nn.ReLU(True),
+            #nn.ConvTranspose2d(32, nc, 4, 2, 1),
+            #nn.Sigmoid()   # B,  nc, 64, 64
+        )
+        self.weight_init()
+        
+    def weight_init(self):
+        for block in self._modules:
+            for m in self._modules[block]:
+                kaiming_init(m)
+
+    def forward(self, x):
+        distributions = self._encode(x)
+        mu = distributions[:, :self.z_dim]
+        logvar = distributions[:, self.z_dim:]
+        z = reparametrize(mu, logvar)
+        x_recon = self._decode(z)
+        x_recon = x_recon.view(x.size())
+        return x_recon, mu, logvar
+
+    def _encode(self, x):
+        return self.encoder(x)
+
+    def _decode(self, z):
+        return self.decoder(z)    
 
 def kaiming_init(m):
     if isinstance(m, (nn.Linear, nn.Conv2d)):

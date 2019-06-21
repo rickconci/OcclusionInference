@@ -39,7 +39,7 @@ def default_loader(path):
         return pil_loader(path)
     
 class MyDataset(Dataset):
-    def __init__(self,image_paths, target_paths, image_size = 64 ):
+    def __init__(self,image_paths, target_paths, image_size ):
         self.image_paths = image_paths
         self.target_paths = target_paths
         self.image_size = image_size
@@ -49,12 +49,45 @@ class MyDataset(Dataset):
 
         transform = transforms.Compose([
             transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
-            #transforms.Grayscale(),
+            transforms.Grayscale(),
             transforms.ToTensor(),])
-        x = transform(x_sample)
-        y = transform(y_sample)
-        
-        return x, y
+        self.x = transform(x_sample)
+        self.y = transform(y_sample)
+        sample = {'x':self.x, 'y':self.y}
+        return sample
+        #return self.x, self.y
 
     def __len__(self):
         return len(os.listdir(self.image_paths))
+    
+    
+def return_data(args):
+    name = args.dataset
+    dset_dir = args.dset_dir
+    batch_size = args.batch_size
+    num_workers = args.num_workers
+    image_size = args.image_size
+    
+    #assert image_size == 64, 'currently only image size of 64 is supported'
+    print(dset_dir)
+    image_paths = "{}train/orig/".format(dset_dir)
+    target_paths = "{}train/inverse/".format(dset_dir)
+    print("image_paths: {}".format(image_paths))
+    dset = MyDataset
+    train_kwargs = {'image_paths':image_paths,
+                    'target_paths': target_paths,
+                    'image_size': image_size}
+    
+    
+    train_data = dset(**train_kwargs) 
+    train_loader = DataLoader(train_data,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              num_workers=num_workers,
+                              pin_memory=True,
+                              drop_last=False)
+
+    data_loader = train_loader
+
+    return data_loader
+    

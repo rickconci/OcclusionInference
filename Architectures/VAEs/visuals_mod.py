@@ -8,10 +8,12 @@ import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf
 plt.rcParams['figure.figsize'] = [15, 15]
 
+from dataset_mod import MyDataset
+
 
 
 class traverse_z():
-    def __init__(self, NN, num_frames = 20):
+    def __init__(self, NN, example_input, num_frames = 20):
         #super(traverse_z, self).__init__()
         self.z_dim = NN.z_dim
         self.NN = NN
@@ -19,6 +21,9 @@ class traverse_z():
         self.num_slice = int(1000/num_frames)
         self.num_frames = num_frames
         orig_sample = 0 #torch.randn(self.z_dim)
+        
+        orig_sample = self.NN._encode(example_input)
+        
         norm_samples = np.random.normal(loc=0, scale=1, size=1000)
         norm_samples.sort()
         norm_samples = torch.from_numpy(norm_samples[0::self.num_slice])
@@ -65,19 +70,23 @@ class plotsave_tests():
         self.MyDataset = MyDataset
         self.test_image_paths = test_image_paths
         self.test_target_paths = test_target_paths
-        self.pdf_path = pdf_path
+        self.pdf_path = "{}testing_recon.pdf".format(pdf_path)
         self.n = n
     
-    
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         dset = self.MyDataset
-        test_data = dset(self.test_image_paths,self.test_target_paths, image_size= 64)
+        test_data = dset(self.test_image_paths,self.test_target_paths, image_size= 32)
 
         pdf = matplotlib.backends.backend_pdf.PdfPages(self.pdf_path)
+        
 
         for i in range(self.n):
-            x, y = test_data.__getitem__(i)
+            sample = test_data.__getitem__(i)
+            x = sample['x'].to(device)
+            y = sample['y'].to(device)
+                
             x = torch.unsqueeze(x, 0)
-            #x = Variable(cuda(x, self.use_cuda))
             x_recon, _, _ = self.NN(x)
             x = x.detach().numpy()
             y = y.detach().numpy()
