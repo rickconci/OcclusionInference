@@ -3,7 +3,8 @@ Contains the clutter class
 '''
 
 import os
-from utils_mod import shlex_cmd
+from utils_mod import shlex_cmd, default_loader
+
 
 class Clutter:
     '''
@@ -116,6 +117,18 @@ class Clutter:
             
             raise FileNotFoundError('Image {0} failed to render with the following command.\n\
             {1}'.format(fname+'.bmp', image_cmd))
+            
+        img_loaded = default_loader(filename)
+        
+        transform = transforms.Compose([
+            transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
+            transforms.Grayscale(),
+            transforms.ToTensor(),])
+        img_tensor = transform(img_loaded)
+        
+        
+        del_cmd = "rm {}".format(fname+'.bmp')
+        shlex_cmd(del_cmd)
                     
     def render_clutter(self, fname=None, thread_limit=None):
         '''
@@ -138,3 +151,4 @@ class Clutter:
         else:
             raise ValueError('Composition type {0} is not recognised'\
             .format(self.composition_type))
+            
