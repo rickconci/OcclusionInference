@@ -130,11 +130,15 @@ class Solver(object):
         self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
                                     betas=(self.beta1, self.beta2))
         
-        print("net on cuda:" + str(next(self.net.parameters()).is_cuda))
-        
+        print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
+             
         self.viz_name = args.viz_name
         self.viz_port = args.viz_port
         self.viz_on = args.viz_on
+        self.win_recon = None
+        self.win_kld = None
+        self.win_mu = None
+        self.win_var = None
         if self.viz_on:
             self.viz = visdom.Visdom(port=self.viz_port)
             
@@ -215,7 +219,7 @@ class Solver(object):
                     self.save_checkpoint('last')
                     pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
 
-                if self.global_iter%500 == 0:
+                if self.global_iter%1000 == 0:
                     self.save_checkpoint(str(self.global_iter))
 
                 if self.global_iter >= self.max_iter:
