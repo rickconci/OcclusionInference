@@ -85,22 +85,23 @@ class conv_VAE_64(nn.Module):
 
     
 class conv_VAE_32(nn.Module):
-    def __init__(self, z_dim=10, nc=1):
+    def __init__(self, z_dim=10,n_filter=32, nc=1):
         super(conv_VAE_32, self).__init__()
         self.nc = nc
         self.z_dim = z_dim
+        self.n_filter = n_filter
         #assume initial size is 64 x 64 
         self.encoder = nn.Sequential(
             #nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 32, 32
             #nn.ReLU(True),
-            nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 16, 16
+            nn.Conv2d(nc, self.n_filter, 4, 2, 1),          # B,  32, 16, 16
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 4, 2, 1),          # B,  32,  8,  8
+            nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  8,  8
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 4, 2, 1),          # B,  32,  4,  4
+            nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  4,  4
             nn.ReLU(True),
-            View((-1, 32*4*4)),                  # B, 512
-            nn.Linear(32*4*4, 256),              # B, 256
+            View((-1, self.n_filter*4*4)),                  # B, 512
+            nn.Linear(self.n_filter*4*4, 256),              # B, 256
             nn.ReLU(True),
             nn.Linear(256, 256),                 # B, 256
             nn.ReLU(True),
@@ -114,17 +115,16 @@ class conv_VAE_32(nn.Module):
             nn.ReLU(True),
             nn.Linear(256, 32*4*4),              # B, 512
             nn.ReLU(True),
-            View((-1, 32, 4, 4)),                # B,  32,  4,  4
-            nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32,  8,  8
+            View((-1, self.n_filter, 4, 4)),                # B,  32,  4,  4
+            nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32,  8,  8
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, 32, 4, 2, 1), # B,  32, 16, 16
+            nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32, 16, 16
             nn.ReLU(True),
-            nn.ConvTranspose2d(32, nc, 4, 2, 1), # B,  32, 32, 32
+            nn.ConvTranspose2d(self.n_filter, nc, 4, 2, 1), # B,  32, 32, 32
             #nn.ReLU(True),
             #nn.ConvTranspose2d(32, nc, 4, 2, 1),
-            #nn.Sigmoid()   # B,  nc, 64, 64
         )
-        self.weight_init()
+        self.weight_init() 
         
     def weight_init(self):
         for block in self._modules:

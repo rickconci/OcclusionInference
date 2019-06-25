@@ -13,6 +13,10 @@ from Clutter_mod import Clutter
 from utils_mod import shlex_cmd, DIGITS
 from io_mod import name_files
 
+import warnings
+warnings.filterwarnings("ignore")
+
+
 def truncated_normal_2d(minimum, maximum, mean, covariance):
     '''
     Draws a sample from a 2d truncated normal distribution
@@ -66,6 +70,7 @@ def sample_clutter(**kwargs):
     n_letters = kwargs.get('n_letters', 1)
     font_set = kwargs.get('font_set', ['helvetica-bold'])
     character_set = kwargs.get('character_set', DIGITS)
+    digit_colour_type = kwargs.get('digit_colour_type', 'black_white')
     face_colour_set = kwargs.get('face_colour_set', [(0, 0, 0, 1.0)])
     edge_colour_set = kwargs.get('edge_colour_set', [(255, 255, 255, 1.0)])
     linewidth = kwargs.get('linewidth', 20)
@@ -92,19 +97,30 @@ def sample_clutter(**kwargs):
     char_opt['fontsize'] = fontsize
     for i in range(n_letters):
         char_opt['identity'] = characters[i]
-        
         char_opt['font'] = random.choice(font_set)
-        if i ==0:
-            char_opt['face_colour'] = random.choice(face_colour_set) #can sample from face colour set 
-            char_opt['edge_colour'] = char_opt['face_colour'] #can sample form edge colour set
-        elif i==1:
-            face_colour = []
-            face_colour.append(char_opt['face_colour'])
-            face_colour = np.array(face_colour)
-            face_colour.flatten()
-            char_opt['face_colour'] = abs([255, 255, 255, 0] - face_colour[0]) #can sample from face colour set 
-            char_opt['edge_colour'] = char_opt['face_colour'] #can sample form edge colour set
-
+        
+        if n_letters ==2:
+            if digit_colour_type == 'black_white':
+                if i ==0:
+                    char_opt['face_colour'] = random.choice(face_colour_set) 
+                    char_opt['edge_colour'] = char_opt['face_colour'] 
+                elif i==1:
+                    face_colour = []
+                    face_colour.append(char_opt['face_colour'])
+                    face_colour = np.array(face_colour)
+                    face_colour.flatten()
+                    char_opt['face_colour'] = abs([255, 255, 255, 0] - face_colour[0]) 
+                    char_opt['edge_colour'] = char_opt['face_colour']
+            elif digit_colour_type == 'black':
+                char_opt['face_colour'] = random.choice(face_colour_set)
+                char_opt['edge_colour'] = random.choice(edge_colour_set) 
+            
+                
+        elif n_letters >2:
+            char_opt['face_colour'] = random.choice(face_colour_set) #set to black if n_letters >2
+            char_opt['edge_colour'] = random.choice(edge_colour_set) #set to white if n_letters >2
+        
+        
         # Sample the offset
         if tuple(offset_cov) == ((0, 0), (0, 0)):
             char_opt['offset'] = offset_mean[i]

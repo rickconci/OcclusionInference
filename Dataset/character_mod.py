@@ -2,6 +2,9 @@
 Contains the character class
 '''
 
+import warnings
+warnings.filterwarnings("ignore")
+
 class Character:
     '''
     Contains all parameters for a given character

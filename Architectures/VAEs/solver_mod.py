@@ -97,6 +97,7 @@ class Solver(object):
         self.global_iter = 0
         
         self.z_dim = args.z_dim
+        self.image_size = args.image_size
         self.beta = args.beta
         self.model = args.model
         self.lr = args.lr
@@ -109,9 +110,9 @@ class Solver(object):
             raise NotImplementedError
             
         if args.model == 'conv_VAE_32':
-            net = conv_VAE_32
+            net = conv_VAE_32(self.z_dim, self.nc)
         elif args.model == 'conv_VAE_64':
-            net = conv_VAE_64
+            net = conv_VAE_64(self.z_dim, self.nc)
         else:
             raise NotImplementedError('Model not correct')
         
@@ -126,7 +127,7 @@ class Solver(object):
             
         # copy the model to each device
         #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
-        self.net = net(self.z_dim, self.nc).to(device) 
+        self.net = net.to(device) 
         self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
                                     betas=(self.beta1, self.beta2))
         
@@ -234,20 +235,21 @@ class Solver(object):
         sample = torch.randn(16, self.z_dim)
         test_recon = self.net._decode(sample)
         
-        torchvision.utils.save_image(test_recon.view(test_recon.size(0), 1, 32, 32).data.cpu(), 'sample_image.png')
-        import os
-        cwd = os.getcwd()
-        print(cwd)
-        Image('sampling_z.png')
+        #Print sample images by decoding samples of normal distribution size of z_dim
+        torchvision.utils.save_image( F.sigmoid(x_recon).view(
+            test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), 'sample_image.png')
+        Image('sampling_z_{}.png'.format(self.global_iter))
         
-        #dset = self.MyDataset
-        #test_data = dset(self.test_image_paths,self.test_target_paths, image_size= 64)
-        #example_id = test_data.__getitem__(0)
-        #traverse_z(self.net, example_id)
-        
+        #select train/test image to traverse 
         self.test_image_paths = os.path.join(self.dset_dir + "test/orig/")
         self.test_target_paths = os.path.join(self.dset_dir + "test/inverse/")
-        plotsave_tests(self.net, MyDataset, self.test_image_paths,self.test_target_paths, self.dset_dir, n=20 )
+        dset = MyDataset
+        test_data = dset(self.test_image_paths,self.test_target_paths, image_size= self.image_size)
+        example_id = test_data.__getitem__(0)
+        
+        traverse_z(self.net, example_id)
+    
+        plotsave_tests(self.net, test_data, self.dset_dir, n=20 )
 
         
     def net_mode(self, train):
@@ -260,7 +262,10 @@ class Solver(object):
             self.net.eval()
 
     def save_checkpoint(self, filename, silent=True):
-        model_states = {'net':self.net.state_dict(),}
+        if torch.cuda.device_count()>1:
+            model_states = {'net': self.net.module.state_dict(),}
+        else:
+            model_states = {'net':self.net.state_dict(),}
         optim_states = {'optim':self.optim.state_dict(),}
         win_states = {'recon':self.win_recon,
                       'kld':self.win_kld,
@@ -286,7 +291,10 @@ class Solver(object):
             self.win_kld = checkpoint['win_states']['kld']
             self.win_var = checkpoint['win_states']['var']
             self.win_mu = checkpoint['win_states']['mu']
-            self.net.load_state_dict(checkpoint['model_states']['net'])
+            if torch.cuda.device_count()>1:
+                self.net.module.load_state_dict(checkpoint['model_states']['net'])
+            else:
+                self.net.load_state_dict(checkpoint['model_states']['net'])
             self.optim.load_state_dict(checkpoint['optim_states']['optim'])
             print("=> loaded checkpoint '{} (iter {})'".format(file_path, self.global_iter))
         else:

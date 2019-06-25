@@ -1,9 +1,11 @@
 '''
 Contains the clutter class
 '''
+import warnings
+warnings.filterwarnings("ignore")
 
 import os
-from utils_mod import shlex_cmd, default_loader
+from utils_mod import shlex_cmd
 
 
 class Clutter:
@@ -47,7 +49,7 @@ class Clutter:
         # Initialise the background
         image_size_str = '{0}x{1}'.format(self.image_size[0], self.image_size[1])
         kwargs = {'bg_colour':'rgba(119,119,119,1.0)', 'image_size_str':image_size_str}
-        image_cmd = 'magick xc:{bg_colour} -resize {image_size_str}! '.format(**kwargs)
+        image_cmd = 'magick xc:{bg_colour} +antialias -resize {image_size_str}! '.format(**kwargs) # +antialias
 
         # If want to invert order of letters but keeping all other arguments the same
         if inverse==True:
@@ -98,13 +100,13 @@ class Clutter:
             image_cmd += outline_cmd + face_cmd
 
         # Add the command to save the image as a BMP
-        image_cmd += 'BMP3:{0!r}'.format(fname+'.bmp')
+        image_cmd += 'PNG8:{0!r}'.format(fname+'.png') #BMP3 .bmp
 
         # Add a thread limit if necessary
         if thread_limit is not None:
             image_cmd += ' -limit thread {0}'.format(thread_limit)
             
-        filename = os.path.abspath(fname+'.bmp')
+        filename = os.path.abspath(fname+'.png') #.bmp
         directory = os.path.dirname(filename)
         if not os.path.exists(directory):
             os.makedirs(directory)
@@ -113,22 +115,12 @@ class Clutter:
         shlex_cmd(image_cmd)
         
 
-        if not os.path.exists(fname+'.bmp'):
+        if not os.path.exists(fname+'.png'): #.bmp
             
             raise FileNotFoundError('Image {0} failed to render with the following command.\n\
-            {1}'.format(fname+'.bmp', image_cmd))
+            {1}'.format(fname+'.png', image_cmd)) #.bmp
             
-        img_loaded = default_loader(filename)
-        
-        transform = transforms.Compose([
-            transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
-            transforms.Grayscale(),
-            transforms.ToTensor(),])
-        img_tensor = transform(img_loaded)
-        
-        
-        del_cmd = "rm {}".format(fname+'.bmp')
-        shlex_cmd(del_cmd)
+    
                     
     def render_clutter(self, fname=None, thread_limit=None):
         '''

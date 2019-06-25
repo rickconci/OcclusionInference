@@ -13,6 +13,9 @@ from character_mod import Character
 from Clutter_mod import Clutter
 from utils_mod import shlex_cmd, DIGITS
 
+import warnings
+warnings.filterwarnings("ignore")
+
 import matplotlib.pyplot as plt
 
 def save_images_as_mat(mat_fname, clutter_list, image_save_size, fname_list=None,
