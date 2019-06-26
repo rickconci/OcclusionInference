@@ -234,13 +234,16 @@ class Solver(object):
         
     def test(self):
         #self.net.eval()   but supposed to add when testing?
-        
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
         #Print sample images by decoding samples of normal distribution size of z_dim
         sample = torch.randn(16, self.z_dim)
-        test_recon = self.net._decode(sample)
-        torchvision.utils.save_image( F.sigmoid(test_recon).view(
-            test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), 'sample_image.png')
-        Image('sampling_z_{}.png'.format(self.global_iter))
+        sample.to(device)
+        with torch.no_grad():
+            test_recon = self.net._decode(sample)
+            torchvision.utils.save_image( F.sigmoid(test_recon).view(
+                test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), 'sample_image.png')
+            Image('sampling_z_{}.png'.format(self.global_iter))
         
         
         #select test image to traverse 
@@ -249,8 +252,9 @@ class Solver(object):
         self.test_target_paths = os.path.join(self.dset_dir + "test/inverse/")
         dset = MyDataset
         test_data = dset(self.test_image_paths,self.test_target_paths, image_size= self.image_size)
-        example_id = test_data.__getitem__(0)
-        traverse_z(self.net, example_id)
+        for i in range(3):
+            example_id = test_data.__getitem__(i+3)
+            traverse_z(self.net, example_id, id=str(i), num_frames=100)
     
         #create pdf with reconstructed test images 
         print('Reconstructing Test Images!')

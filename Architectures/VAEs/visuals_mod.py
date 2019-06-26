@@ -18,10 +18,11 @@ from model_mod import reparametrize
 
 
 class traverse_z():
-    def __init__(self, NN, example_id,  num_frames = 20):
+    def __init__(self, NN, example_id,  id, num_frames = 20, ):
         self.z_dim = NN.z_dim
         self.num_slice = int(1000/num_frames)
         self.num_frames = num_frames
+        self.id = id
         
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         x_test_sample = example_id['x'].to(device)
@@ -50,22 +51,22 @@ class traverse_z():
         #print(traverse_input.shape)
         
         #Populate matrix with individually varying Zs
-        indexs = np.arange(0, self.num_frames*self.z_dim, self.z_dim)
+        indexs = np.arange(0, self.num_frames*self.z_dim, self.num_frames)
         for i in indexs:
-            z = int(i/num_frames)
+            z = int(i/self.num_frames)
             traverse_input[i:(i+self.num_frames),z] = norm_samples
             
         #create all reconstruction images
         reconst = NN._decode(traverse_input)
 
         #Create GIFs
-        indexs = np.arange(0, self.num_frames*self.z_dim, self.z_dim)
+        indexs = np.arange(0, self.num_frames*self.z_dim, self.num_frames)
         for i in indexs:
             #save images for each gif into the images list
             images = []
             for e in range(self.num_frames):
                 #save images to make gifs into different folders
-                filename = 'traversals/z{}/img{}.png'.format(int(i/self.num_frames),e)
+                filename = 'traversals{}/z{}/img{}.png'.format(self.id,int(i/self.num_frames),e)
                 directory = os.path.dirname(filename)
                 if not os.path.exists(directory):
                     os.makedirs(directory)
@@ -73,15 +74,17 @@ class traverse_z():
                 images.append(imageio.imread(filename))
             
             #save all gifs into same folder
-            filename_2 = 'traversals_gifs/traversing_z_{}.gif'.format(int(i/self.z_dim),int(i/self.z_dim))
+            filename_2 = 'traversals_gifs{}/traversing_z_{}.gif'.format(
+                self.id,int(i/self.num_frames),int(i/self.num_frames))
             directory_2 = os.path.dirname(filename_2)
             if not os.path.exists(directory_2):
                     os.makedirs(directory_2)
-            imageio.mimsave('traversals_gifs/traversing_z_{}.gif'.format(
-                int(i/self.z_dim),int(i/self.z_dim)), images)
+            imageio.mimsave('traversals_gifs{}/traversing_z_{}.gif'.format(
+                self.id, int(i/self.num_frames),int(i/self.num_frames)), images)
             
             #add the actual target image to the GIF image folder
-            torchvision.utils.save_image(y_test_sample[0,:,:], 'traversals_gifs/target.png')
+            torchvision.utils.save_image(y_test_sample[0,:,:], 
+                                         'traversals_gifs{}/target.png'.format(self.id))
             
             
 class plotsave_tests(MyDataset):
