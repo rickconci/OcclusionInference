@@ -112,13 +112,13 @@ class Solver(object):
             raise NotImplementedError
             
         if args.model == 'conv_VAE_32':
-            net = conv_VAE_32(self.z_dim, self.nc)
+            net = conv_VAE_32(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True)
         elif args.model == 'conv_VAE_64':
             net = conv_VAE_64(self.z_dim, self.nc)
         else:
             raise NotImplementedError('Model not correct')
         
-        print("CUDA availability" + str(torch.cuda.is_available()))
+        print("CUDA availability: " + str(torch.cuda.is_available()))
         
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
@@ -169,7 +169,7 @@ class Solver(object):
         self.gather = DataGather()
         
     def train(self):
-        self.net_mode(train=True)
+        #self.(train=True)
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         out = False
@@ -233,35 +233,38 @@ class Solver(object):
         pbar.close()
         
     def test(self):
-        self.net_mode(train=False)
-        sample = torch.randn(16, self.z_dim)
-        test_recon = self.net._decode(sample)
+        #self.net.eval()   but supposed to add when testing?
         
         #Print sample images by decoding samples of normal distribution size of z_dim
-        torchvision.utils.save_image( F.sigmoid(x_recon).view(
+        sample = torch.randn(16, self.z_dim)
+        test_recon = self.net._decode(sample)
+        torchvision.utils.save_image( F.sigmoid(test_recon).view(
             test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), 'sample_image.png')
         Image('sampling_z_{}.png'.format(self.global_iter))
         
-        #select train/test image to traverse 
+        
+        #select test image to traverse 
+        print("Traversing!")
         self.test_image_paths = os.path.join(self.dset_dir + "test/orig/")
         self.test_target_paths = os.path.join(self.dset_dir + "test/inverse/")
         dset = MyDataset
         test_data = dset(self.test_image_paths,self.test_target_paths, image_size= self.image_size)
         example_id = test_data.__getitem__(0)
-        
         traverse_z(self.net, example_id)
     
+        #create pdf with reconstructed test images 
+        print('Reconstructing Test Images!')
         plotsave_tests(self.net, test_data, self.dset_dir, n=20 )
 
         
-    def net_mode(self, train):
-        if not isinstance(train, bool):
-            raise('Only bool type is supported. True or False')
-
-        if train:
-            self.net.train()
-        else:
-            self.net.eval()
+    #def net_mode(self, train):
+    #    if not isinstance(train, bool):
+    #        raise('Only bool type is supported. True or False')#
+    #
+    #    if train:
+    #        self.net.train()
+    #    else:
+    #        self.net.eval()
 
     def save_checkpoint(self, filename, silent=True):
         if torch.cuda.device_count()>1:

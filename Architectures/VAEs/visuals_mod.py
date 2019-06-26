@@ -35,10 +35,10 @@ class traverse_z():
         x_test_sample = torch.unsqueeze(x_test_sample, 0)
         z_distributions = NN._encode(x_test_sample)
         mu = z_distributions[:, :self.z_dim]
-        logvar = z_distributions[:, self.z_dim:]
-        z = reparametrize(mu, logvar)
-        z_sample = z.detach()
-        print(z_sample.shape)
+        #logvar = z_distributions[:, self.z_dim:]
+        #z = reparametrize(mu, logvar)
+        z_sample = mu.detach()
+        #print(z_sample.shape)
         
 
         
@@ -47,7 +47,7 @@ class traverse_z():
         norm_samples.sort()
         norm_samples = torch.from_numpy(norm_samples[0::self.num_slice])
         traverse_input = torch.ones(self.num_frames*self.z_dim,1)*z_sample
-        print(traverse_input.shape)
+        #print(traverse_input.shape)
         
         #Populate matrix with individually varying Zs
         indexs = np.arange(0, self.num_frames*self.z_dim, self.z_dim)
@@ -77,7 +77,8 @@ class traverse_z():
             directory_2 = os.path.dirname(filename_2)
             if not os.path.exists(directory_2):
                     os.makedirs(directory_2)
-            imageio.mimsave('traversals_gifs/traversing_z_{}.gif'.format(int(i/self.z_dim),int(i/self.z_dim)), images)
+            imageio.mimsave('traversals_gifs/traversing_z_{}.gif'.format(
+                int(i/self.z_dim),int(i/self.z_dim)), images)
             
             #add the actual target image to the GIF image folder
             torchvision.utils.save_image(y_test_sample[0,:,:], 'traversals_gifs/target.png')
@@ -103,13 +104,15 @@ class plotsave_tests(MyDataset):
             y = sample['y'].to(device)
                 
             x = torch.unsqueeze(x, 0)
-            x_recon, _, _ = self.NN(x)
+            x_recon = self.NN(x, train=False)
             x = x.detach().numpy()
             y = y.detach().numpy()
-            x_recon = x_recon.detach().numpy()
-
-            f, (a0, a1, a2) = plt.subplots(r1, 3, gridspec_kw={'width_ratios': [1, 1,1]})
-            a0.imshow(x[0,0,:,:])
+            x_recon = F.sigmoid(x_recon).detach().numpy()
+            
+            #plt.gray()    if want grey image instead of coloured 
+            f, (a0, a1, a2) = plt.subplots(1, 3, gridspec_kw={'width_ratios': [1, 1,1]})
+            #https://scipy-cookbook.readthedocs.io/items/Matplotlib_Show_colormaps.html
+            a0.imshow(x[0,0,:,:]) #cmap='...' 
             a1.imshow(y[0,:,:])
             a2.imshow(x_recon[0,0,:,:])
             f.tight_layout()
