@@ -64,9 +64,10 @@ class Solver(object):
         
         
         if args.font_set == 'fixed':
-            self.font_set = ['helvetica-bold']
+            self.font_set = ['Liberation-Sans-Bold']
         elif args.font_set == 'random':
-            self.font_set = ['arial-bold', 'helvetica-bold']
+            #check if have arial-bold etc... with convert -list font 
+            self.font_set = ['Liberation-Sans-Bold', 'helvetica-bold']
         
         clutter_list = []
         for i in range(self.n_samples):

@@ -40,6 +40,8 @@ if __name__ == "__main__":
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
 
     parser.add_argument('--z_dim', default=20, type=int, help='dimension of the representation z')
+    parser.add_argument('--n_filter', default=32, type=int, help='number of filters in convolutional layers')
+
     parser.add_argument('--beta', default=1, type=float, help='beta parameter for KL-term in original beta-VAE')
     parser.add_argument('--model', default='conv_VAE_32', type=str, help='conv_VAE_32 or conv_VAE_64')
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')

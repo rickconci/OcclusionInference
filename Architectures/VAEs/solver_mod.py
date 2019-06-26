@@ -104,6 +104,8 @@ class Solver(object):
         self.beta1 = args.beta1
         self.beta2 = args.beta2
         
+        self.n_filter = args.n_filter
+        
         if args.dataset.lower() == 'digits':
             self.nc = 1
         else:
