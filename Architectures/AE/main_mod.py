@@ -43,7 +43,7 @@ if __name__ == "__main__":
     parser.add_argument('--n_filter', default=32, type=int, help='number of filters in convolutional layers')
 
     parser.add_argument('--beta', default=1, type=float, help='beta parameter for KL-term in original beta-VAE')
-    parser.add_argument('--model', default='conv_VAE_32', type=str, help='conv_VAE_32, conv_AE ')
+    parser.add_argument('--model', default='conv_VAE_32', type=str, help='conv_VAE_32, conv_AE_32 ')
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
     parser.add_argument('--beta1', default=0.9, type=float, help='Adam optimizer beta1')
     parser.add_argument('--beta2', default=0.999, type=float, help='Adam optimizer beta2')

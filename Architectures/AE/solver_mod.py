@@ -114,9 +114,8 @@ class Solver(object):
             
         if args.model == 'conv_VAE_32':
             net = conv_VAE_32(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True)
-        elif args.model == 'conv_AE':
-            net = conv_VAE_32(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True, eps_zero=True)
-            self.beta = 0
+        elif args.model == 'conv_AE_32':
+            net = conv_AE_32(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True)
         else:
             raise NotImplementedError('Model not correct')
         
