@@ -89,6 +89,7 @@ class DataGather(object):
     def flush(self):
         self.data = self.get_empty_data_dict()
 
+        
 class Solver(object):
     def __init__(self, args):
         self.use_cuda = args.cuda and torch.cuda.is_available()
@@ -97,14 +98,14 @@ class Solver(object):
         self.global_iter = 0
         
         self.z_dim = args.z_dim
+        self.n_filter = args.n_filter
+
         self.image_size = args.image_size
         self.beta = args.beta
         self.model = args.model
         self.lr = args.lr
         self.beta1 = args.beta1
         self.beta2 = args.beta2
-        
-        self.n_filter = args.n_filter
         
         if args.dataset.lower() == 'digits':
             self.nc = 1
@@ -120,7 +121,7 @@ class Solver(object):
         
         print("CUDA availability: " + str(torch.cuda.is_available()))
         
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
         #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
         if torch.cuda.device_count()>1:
@@ -129,7 +130,7 @@ class Solver(object):
             
         # copy the model to each device
         #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
-        self.net = net.to(device) 
+        self.net = net.to(self.device) 
         self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
                                     betas=(self.beta1, self.beta2))
         
@@ -152,10 +153,10 @@ class Solver(object):
         if self.ckpt_name is not None:
             self.load_checkpoint(self.ckpt_name)
 
-        #self.save_output = args.save_output
-        #self.output_dir = os.path.join(args.output_dir, args.viz_name)
-        #if not os.path.exists(self.output_dir):
-        #    os.makedirs(self.output_dir, exist_ok=True)
+        self.save_output = args.save_output
+        self.output_dir = os.path.join(args.output_dir, args.viz_name)
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir, exist_ok=True)
 
         self.gather_step = args.gather_step
         self.display_step = args.display_step
@@ -164,25 +165,24 @@ class Solver(object):
         self.dset_dir = args.dset_dir
         self.dataset = args.dataset
         self.batch_size = args.batch_size
-        self.data_loader = return_data(args)
+        self.train_data_loader, self.test_data_loader = return_data(args)
 
         self.gather = DataGather()
         
     def train(self):
-        #self.(train=True)
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        #self.net(train=True)
 
         out = False
         pbar = tqdm(total=self.max_iter)
         pbar.update(self.global_iter)
         
         while not out:
-            for sample in self.data_loader: 
+            for sample in self.train_data_loader: 
                 self.global_iter += 1
                 pbar.update(1)
                 
-                x = sample['x'].to(device)
-                y = sample['y'].to(device)
+                x = sample['x'].to(self.device)
+                y = sample['y'].to(self.device)
                 
                 x_recon, mu, logvar = self.net(x)
                 recon_loss = reconstruction_loss(y, x_recon)
@@ -219,10 +219,19 @@ class Solver(object):
                     #    self.gather.flush()
                         
                 if self.global_iter%self.save_step == 0:
+                    self.test_loss()
+                    if self.test_loss  < 
                     self.save_checkpoint('last')
                     pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
-
-                if self.global_iter%1000 == 0:
+                    self.test_plots()
+                    with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                        myfile.write('\n[{}] recon_loss:{:.3f} total_kld:{:.3f} \
+                        mean_kld:{:.3f}, test_loss:{;.3f}'.format(
+                        self.global_iter, recon_loss.data, total_kld.data[0],
+                                     mean_kld.data[0], self.testLoss)
+                    
+                    
+                if self.global_iter%500 == 0:
                     self.save_checkpoint(str(self.global_iter))
 
                 if self.global_iter >= self.max_iter:
@@ -231,19 +240,41 @@ class Solver(object):
 
         pbar.write("[Training Finished]")
         pbar.close()
+    
+    def test_loss(self):
+        testLoss = 0.0
+        cnt = 0
+        with torch.no_grad():
+            for sample in self.test_data_loader:
+                x = sample['x'].to(self.device)
+                y = sample['y'].to(self.device)
+                
+                x_recon, mu, logvar = self.net(x)
+                recon_loss = reconstruction_loss(y, x_recon)
+                total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
+                
+                testLoss += recon_loss + self.beta*total_kld
+                cnt += 1
+        self.testLoss = testLoss/cnt
+        pbar.write('[{}] test_Loss:{:.3f}'.format(
+                        self.global_iter, testLoss))
         
-    def test(self):
+        self.gather.insert(iter=self.global_iter,
+                           mu=mu.mean(0).data, var=logvar.exp().mean(0).data,
+                           recon_loss=recon_loss.data, total_kld=total_kld.data,
+                           dim_wise_kld=dim_wise_kld.data, mean_kld=mean_kld.data,
+                           test_loss=testLoss)
+        
+    def test_plots(self):
         #self.net.eval()   but supposed to add when testing?
-        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         #Print sample images by decoding samples of normal distribution size of z_dim
         sample = torch.randn(16, self.z_dim)
-        sample.to(device)
         with torch.no_grad():
             test_recon = self.net._decode(sample)
             torchvision.utils.save_image( F.sigmoid(test_recon).view(
                 test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), 'sample_image.png')
-            Image('sampling_z_{}.png'.format(self.global_iter))
+            Image('{}/sampling_z_{}.png'.format(self.output_dir, self.global_iter))
         
         
         #select test image to traverse 
@@ -253,12 +284,12 @@ class Solver(object):
         dset = MyDataset
         test_data = dset(self.test_image_paths,self.test_target_paths, image_size= self.image_size)
         for i in range(3):
-            example_id = test_data.__getitem__(i+3)
-            traverse_z(self.net, example_id, id=str(i), num_frames=100)
+            example_id = test_data.__getitem__(i)
+            traverse_z(self.net, example_id, id=str(i), self.output_dir, self.global_iter, num_frames=100)
     
         #create pdf with reconstructed test images 
         print('Reconstructing Test Images!')
-        plotsave_tests(self.net, test_data, self.dset_dir, n=20 )
+        plotsave_tests(self.net, test_data, self.output_dir, self.global_iter, n=20 )
 
         
     #def net_mode(self, train):

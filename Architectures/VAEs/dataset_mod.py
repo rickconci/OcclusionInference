@@ -70,16 +70,14 @@ def return_data(args):
     
     #assert image_size == 64, 'currently only image size of 64 is supported'
     print(dset_dir)
-    image_paths = "{}train/orig/".format(dset_dir)
-    target_paths = "{}train/inverse/".format(dset_dir)
-    print("image_paths: {}".format(image_paths))
-    dset = MyDataset
-    train_kwargs = {'image_paths':image_paths,
-                    'target_paths': target_paths,
+    train_image_paths = "{}train/orig/".format(dset_dir)
+    train_target_paths = "{}train/inverse/".format(dset_dir)
+    print("train_image_paths: {}".format(train_image_paths))
+    dset_train = MyDataset
+    train_kwargs = {'image_paths':train_image_paths,
+                    'target_paths': train_target_paths,
                     'image_size': image_size}
-    
-    
-    train_data = dset(**train_kwargs) 
+    train_data = dset_train(**train_kwargs) 
     train_loader = DataLoader(train_data,
                               batch_size=batch_size,
                               shuffle=True,
@@ -87,7 +85,21 @@ def return_data(args):
                               pin_memory=True,
                               drop_last=False)
 
-    data_loader = train_loader
-
-    return data_loader
+    test_image_paths = os.path.join(dset_dir + "test/orig/")
+    test_target_paths = os.path.join(dset_dir + "test/inverse/")
+    dset_test= MyDataset
+    test_kwargs = {'image_paths': test_image_paths,
+                    'target_paths': test_target_paths,
+                    'image_size': image_size}
+    test_data = dset_test(**train_kwargs) 
+    test_loader = DataLoader(test_data,
+                              batch_size=200,
+                              shuffle=False,
+                              num_workers=num_workers,
+                              pin_memory=True,
+                              drop_last=False)
+    
+    
+    
+    return train_loader, test_loader
     

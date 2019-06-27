@@ -52,7 +52,7 @@ if __name__ == "__main__":
     parser.add_argument('--dataset', default='digits', type=str, help='dataset name')
 
     parser.add_argument('--image_size', default=32, type=int, help='image size. now only (64,64) is supported')
-    parser.add_argument('--num_workers', default=2, type=int, help='dataloader num_workers')
+    parser.add_argument('--num_workers', default=8, type=int, help='dataloader num_workers')
 
     parser.add_argument('--viz_on', default=False, type=str2bool, help='enable visdom visualization')
     parser.add_argument('--viz_name', default='main', type=str, help='visdom env name')
