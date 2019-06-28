@@ -100,7 +100,7 @@ def return_data(args):
                               num_workers=num_workers,
                               pin_memory=True,
                               drop_last=False)
-    print('{} train images, {} test images"'.format(rain_data.__len__(), test_data.__len__()))
+    print('{} train images, {} test images"'.format(train_data.__len__(), test_data.__len__()))
     
     
     return train_loader, test_loader

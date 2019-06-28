@@ -173,13 +173,14 @@ class Solver(object):
         
     def train(self):
         #self.net(train=True)
-        if torch.cuda.device_count()>1:
-            print("Let's use", torch.cuda.device_count(), "GPUs!")
-            net = nn.DataParallel(net)
-            
-        # copy the model to each device
-        #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
-        self.net = net.to(self.device) 
+        if next(self.net.parameters()).is_cuda == False:
+            if torch.cuda.device_count()>1:
+                print("Let's use", torch.cuda.device_count(), "GPUs!")
+                self.net = nn.DataParallel(self.net)
+
+            # copy the model to each device
+            #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
+            self.net = net.to(self.device) 
 
         out = False
         pbar = tqdm(total=self.max_iter)
