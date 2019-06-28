@@ -173,6 +173,13 @@ class Solver(object):
         
     def train(self):
         #self.net(train=True)
+        if torch.cuda.device_count()>1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+            net = nn.DataParallel(net)
+            
+        # copy the model to each device
+        #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
+        self.net = net.to(self.device) 
 
         out = False
         pbar = tqdm(total=self.max_iter)
@@ -286,6 +293,7 @@ class Solver(object):
         
     def test_plots(self):
         #self.net.eval()   but supposed to add when testing?
+        self.net.to('cpu')
 
         #Print sample images by decoding samples of normal distribution size of z_dim
         sample = torch.randn(16, self.z_dim)

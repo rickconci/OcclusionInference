@@ -94,14 +94,13 @@ def return_data(args):
                     'target_paths': test_target_paths,
                     'image_size': image_size}
     test_data = dset_test(**test_kwargs)
-    print(test_data.__len__())
     test_loader = DataLoader(test_data,
                               batch_size=200,
                               shuffle=False,
                               num_workers=num_workers,
                               pin_memory=True,
                               drop_last=False)
-    
+    print('{} train images, {} test images"'.format(rain_data.__len__(), test_data.__len__()))
     
     
     return train_loader, test_loader

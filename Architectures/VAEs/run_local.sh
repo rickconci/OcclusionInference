@@ -1,6 +1,6 @@
 #! /bin/sh
 
-python main_mod.py --train False --ckpt_name last --image_size 32 --model conv_AE \
+python main_mod.py --train True --ckpt_name None --image_size 32 --model conv_AE \
     --z_dim 20 --n_filter 32 \
     --max_iter 400 --gather_step 100 --display_step 20 --save_step 200\
     --dset_dir /Users/riccardoconci/Desktop/2_dig_fixed_random_bw/digts/ \

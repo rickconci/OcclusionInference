@@ -10,11 +10,11 @@
 #SBATCH --time=0-1:00:00 # The time the job will take to run.
 
  
-#module load anaconda cuda92/toolkit cuda92/blas cudnn
+module load anaconda cuda92/toolkit cuda92/blas cudnn
 
-#. activate rconci
+. activate rconci
 
-#cd /moto/nklab/users/rc3316/OcclusionInference/Experiments/
+cd /moto/nklab/users/rc3316/OcclusionInference/Architectures/VAEs
 
 #Command to execute Python program
 python main_mod.py --train False --ckpt_name last --image_size 32 --model conv_VAE_32 \
