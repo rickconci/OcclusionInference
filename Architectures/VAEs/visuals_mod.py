@@ -17,7 +17,7 @@ from model_mod import reparametrize
 
 
 
-def traverse_z( NN, example_id, ID, output_dir, global_iter, num_frames = 100):
+def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 100 ):
     z_dim = NN.z_dim
     num_slice = int(1000/num_frames)
 
@@ -33,12 +33,22 @@ def traverse_z( NN, example_id, ID, output_dir, global_iter, num_frames = 100):
     z_distributions = NN._encode(x_test_sample)
     mu = z_distributions[:, :z_dim]
     z_sample = mu.detach()
+    x_recon = NN._decode(z_sample)
     #print(z_sample.shape)
+    print(z_sample)
+    
+    if model == 'conv_VAE_32':
+        #create sorted normal samples & transverse_input matrix made from z encodings of sample image
+        dist_samples = np.random.normal(loc=0, scale=1, size=1000)
+        dist_samples.sort()
+        dist_samples = torch.from_numpy(dist_samples[0::num_slice])
+        
 
-    #create sorted normal samples & transverse_input matrix made from z encodings of sample image
-    norm_samples = np.random.normal(loc=0, scale=1, size=1000)
-    norm_samples.sort()
-    norm_samples = torch.from_numpy(norm_samples[0::num_slice])
+    elif model == 'conv_AE':
+        dist_samples = np.random.uniform(low=-35, high=35, size=1000)
+        dist_samples.sort()
+        dist_samples = torch.from_numpy(dist_samples[0::num_slice])
+            
     traverse_input = torch.mul(torch.ones(num_frames*z_dim,1),z_sample)
 
     #print(traverse_input.shape)
@@ -47,7 +57,7 @@ def traverse_z( NN, example_id, ID, output_dir, global_iter, num_frames = 100):
     indexs = np.arange(0, num_frames*z_dim, num_frames)
     for i in indexs:
         z = int(i/num_frames)
-        traverse_input[i:(i+num_frames),z] = norm_samples
+        traverse_input[i:(i+num_frames),z] = dist_samples
 
     #create all reconstruction images
     reconst = NN._decode(traverse_input)
@@ -57,7 +67,7 @@ def traverse_z( NN, example_id, ID, output_dir, global_iter, num_frames = 100):
     for i in indexs:
         #save images for each gif into the images list
         images = []
-        for e in range(self.num_frames):
+        for e in range(num_frames):
             #save images to make gifs into different folders
             filename = '{}/traversals{}_{}/z{}/img{}.png'.format(output_dir,global_iter,ID,int(i/num_frames),e)
             directory = os.path.dirname(filename)
@@ -75,8 +85,13 @@ def traverse_z( NN, example_id, ID, output_dir, global_iter, num_frames = 100):
                 os.makedirs(directory_2)
         imageio.mimsave('{}/traversals_gifs{}_{}/traversing_z_{}.gif'.format(
             output_dir, global_iter, ID, int(i/num_frames),int(i/num_frames)), images)
-
-
+        
+        with open('{}/traversals_gifs{}_{}/encoded_z.txt'.format(output_dir,global_iter,ID), 'w') as f:
+            f.write(str(z_sample.numpy()))
+        
+        #add the reconstruction image to the GIF image folder
+        torchvision.utils.save_image(x_recon[0,0,:,:],
+                                        '{}/traversals_gifs{}_{}/recon.png'.format(output_dir,global_iter,ID))
         #add the actual target image to the GIF image folder
         torchvision.utils.save_image(y_test_sample[0,:,:],
                                         '{}/traversals_gifs{}_{}/target.png'.format(output_dir,global_iter,ID))
@@ -90,7 +105,7 @@ def plotsave_tests(NN, test_data, pdf_path, global_iter, n=20):
     ## n : number of testing images reconstruct and save
         
     pdf_path = "{}/testing_recon{}.pdf".format(pdf_path, global_iter)
-    pdf = matplotlib.backends.backend_pdf.PdfPages(self.pdf_path)
+    pdf = matplotlib.backends.backend_pdf.PdfPages(pdf_path)
 
     for i in range(n):
         sample = test_data.__getitem__(i)

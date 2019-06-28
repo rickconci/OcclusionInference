@@ -53,6 +53,9 @@ class MyDataset(Dataset):
             transforms.ToTensor(),])
         self.x = transform(x_sample)
         self.y = transform(y_sample)
+        self.x[0,:,:][self.x[0,:,:] == torch.median(self.x[0,:,:])] = 0.5
+        self.y[0,:,:][self.y[0,:,:] == torch.median(self.y[0,:,:])] = 0.5
+
         sample = {'x':self.x, 'y':self.y}
         return sample
         #return self.x, self.y
@@ -69,7 +72,6 @@ def return_data(args):
     image_size = args.image_size
     
     #assert image_size == 64, 'currently only image size of 64 is supported'
-    print(dset_dir)
     train_image_paths = "{}train/orig/".format(dset_dir)
     train_target_paths = "{}train/inverse/".format(dset_dir)
     print("train_image_paths: {}".format(train_image_paths))
@@ -91,7 +93,8 @@ def return_data(args):
     test_kwargs = {'image_paths': test_image_paths,
                     'target_paths': test_target_paths,
                     'image_size': image_size}
-    test_data = dset_test(**train_kwargs) 
+    test_data = dset_test(**test_kwargs)
+    print(test_data.__len__())
     test_loader = DataLoader(test_data,
                               batch_size=200,
                               shuffle=False,

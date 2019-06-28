@@ -23,11 +23,13 @@ def main(args):
         print("Training")
         net.train()
         print("Testing")
-        net.test()
+        net.test_loss()
+        net.test_plots()
         
     elif args.train==False:
         print("Testing")
-        net.test()
+        net.test_loss()
+        net.test_plots()
 
 
 if __name__ == "__main__":
