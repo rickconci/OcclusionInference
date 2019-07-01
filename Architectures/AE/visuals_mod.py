@@ -14,7 +14,6 @@ import matplotlib.backends.backend_pdf
 plt.rcParams['figure.figsize'] = [15, 15]
 
 from dataset_mod import MyDataset
-from model_mod import reparametrize
 
 
 
@@ -37,15 +36,9 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 
     x_recon = NN._decode(z_sample)
     #print(z_sample.shape)
     print(z_sample)
-    
-    if model == 'conv_VAE_32':
-        #create sorted normal samples & transverse_input matrix made from z encodings of sample image
-        dist_samples = np.random.normal(loc=0, scale=1, size=1000)
-        dist_samples.sort()
-        dist_samples = torch.from_numpy(dist_samples[0::num_slice])
         
 
-    elif model == 'conv_AE':
+    if model == 'conv_AE':
         dist_samples = np.random.uniform(low=-35, high=35, size=1000)
         dist_samples.sort()
         dist_samples = torch.from_numpy(dist_samples[0::num_slice])

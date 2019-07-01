@@ -49,16 +49,20 @@ class Solver(object):
         if args.offset == 'fixed_unoccluded':
             self.offset_mean = [(-0.18,-0.18),(0.18,0.18)]
             self.offset_cov = ((0,0),(0,0))
+            self.offset_sample_type = 'uniform'
         elif args.offset == 'random_unoccluded':
-            raise ValueError('need to finish code for random unoccluded')
-            #self.offset_cov = ((0,0),(0,0))
-            #self.offset_mean = [(-0.15,-0.15),(0.15,0.15)]
+            print("random_unoccluded!")
+            self.offset_sample_type = 'random_unoccluded'
+            self.offset_cov = ((-0.20, 0.20), (-0.12, 0.12))
+            self.offset_mean =  ((0,0),(0,0))
         elif args.offset == 'fixed_occluded':
             self.offset_mean =  [(-0.08,-0.08),(0.08,0.08)]
             self.offset_cov = ((0,0),(0,0))
+            self.offset_sample_type = 'gaussian'
         elif args.offset == 'random_occluded':
             self.offset_mean =  (0, 0.054)
-            self.offset_cov = ((-0.20, 0.20), (-0.12, 0.12))
+            self.offset_cov = ((-0.16, 0.16), (-0.10, 0.10))
+            self.offset_sample_type = 'uniform'
         else:
             raise ValueError('unrecognised offset option')
         
@@ -78,6 +82,7 @@ class Solver(object):
                                             offset_cov = self.offset_cov,
                                             offset_mean = self.offset_mean,
                                             font_set=self.font_set,
+                                            offset_sample_type = self.offset_sample_type,
                 
                                             image_size = self.image_size,
                                             fontsize = self.fontsize,

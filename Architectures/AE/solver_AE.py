@@ -24,7 +24,7 @@ from torchvision.utils import make_grid, save_image
 
 
 from dataset_mod import return_data, MyDataset
-from model_mod import conv_VAE_32, conv_AE
+from model_AE import conv_AE, conv_AE_mini
 from visuals_mod import traverse_z, plotsave_tests
 
 
@@ -103,7 +103,7 @@ class Solver(object):
         self.n_filter = args.n_filter
 
         self.image_size = args.image_size
-        self.beta = args.beta
+        self.l1 = args.l1_penalty
         self.model = args.model
         self.lr = args.lr
         self.beta1 = args.beta1
@@ -114,11 +114,10 @@ class Solver(object):
         else:
             raise NotImplementedError
             
-        if args.model == 'conv_VAE_32':
-            net = conv_VAE_32(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True)
-        elif args.model == 'conv_AE':
-            net = conv_AE(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True)
-            self.beta = 0
+        if args.model == 'conv_AE':
+            net = conv_AE(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, l1weight=self.l1, train=True)
+        elif args.model =='conv_AE_mini':
+            net = conv_AE_mini(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, l1weight=self.l1, train=True)
         else:
             raise NotImplementedError('Model not correct')
         
@@ -187,47 +186,27 @@ class Solver(object):
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
                 
-                if self.model == 'conv_VAE_32':
-                    x_recon, mu, logvar = self.net(x)
-                    recon_loss = reconstruction_loss(y, x_recon)
-                    total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
-                    beta_vae_loss = recon_loss + self.beta*total_kld
-                elif self.model == 'conv_AE':
-                    x_recon = self.net(x)
-                    recon_loss = reconstruction_loss(y, x_recon)
-                    beta_vae_loss = recon_loss
-                                
+                x_recon = self.net(x)
+                recon_loss = reconstruction_loss(y, x_recon)
+
                 self.optim.zero_grad()
-                beta_vae_loss.backward()
+                recon_loss.backward()
                 self.optim.step()
                 
                 if self.viz_on and self.global_iter%self.gather_step == 0:
-                    if self.model == 'conv_VAE_32':
-                        self.gather.insert(iter=self.global_iter,
-                                           mu=mu.mean(0).data, var=logvar.exp().mean(0).data,
-                                           recon_loss=recon_loss.data, total_kld=total_kld.data,
-                                           dim_wise_kld=dim_wise_kld.data, mean_kld=mean_kld.data)
+                    self.gather.insert(iter=self.global_iter,
+                                       recon_loss=recon_loss.data)
                     
                 if self.global_iter%self.display_step == 0:
-                    if self.model == 'conv_VAE_32':
-                        pbar.write('[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f}'.format(
-                            self.global_iter, recon_loss.data, total_kld.data[0], mean_kld.data[0]))
-
-                        var = logvar.exp().mean(0).data
-                        var_str = ''
-                        for j, var_j in enumerate(var):
-                            var_str += 'var{}:{:.4f} '.format(j+1, var_j)
-                        pbar.write(var_str)
-                    elif self.model == 'conv_AE':
-                        pbar.write('[{}] recon_loss:{:.3f}'.format(self.global_iter, recon_loss.data))
+                    pbar.write('[{}] recon_loss:{:.3f}'.format(self.global_iter, recon_loss.data))
                     
-                    #if self.viz_on:
-                    #    print("now visdoming!")
-                    #    self.gather.insert(images=y.data)
-                    #    self.gather.insert(images=F.sigmoid(x_recon).data)
-                    #    self.viz_reconstruction()
-                    #    self.viz_lines()
-                    #    self.gather.flush()
+                #if self.viz_on:
+                #    print("now visdoming!")
+                #    self.gather.insert(images=y.data)
+                #    self.gather.insert(images=F.sigmoid(x_recon).data)
+                #    self.viz_reconstruction()
+                #    self.viz_lines()
+                #    self.gather.flush()
                         
                 if self.global_iter%self.save_step == 0:
                     self.test_loss()
@@ -235,14 +214,10 @@ class Solver(object):
                     self.save_checkpoint('last')
                     pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
                     self.test_plots()
-                    if self.model == 'conv_VAE_32':
-                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                            myfile.write('\n[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f}, test_loss:{;.3f}'.format(self.global_iter, recon_loss.data, total_kld.data[0],mean_kld.data[0], self.testLoss))
-                    elif self.model == 'conv_AE':
-                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                            myfile.write('\n[{}] recon_loss:{:.3f} test_loss:{:.3f}'.format(self.global_iter,
-                                                                                            recon_loss.data,
-                                                                                            self.testLoss))
+                    with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                        myfile.write('\n[{}] recon_loss:{:.3f} test_loss:{:.3f}'.format(self.global_iter,
+                                                                                        recon_loss.data,
+                                                                                        self.testLoss))
                                      
                 if self.global_iter%500 == 0:
                     self.save_checkpoint(str(self.global_iter))
@@ -263,16 +238,9 @@ class Solver(object):
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
                 print(x.shape)
-                
-                if self.model == 'conv_VAE_32':
-                    x_recon, mu, logvar = self.net(x)
-                    recon_loss = reconstruction_loss(y, x_recon)
-                    total_kld, dim_wise_kld, mean_kld = kl_divergence(mu, logvar)
-                    testLoss += recon_loss + self.beta*total_kld
-                elif self.model == 'conv_AE':
-                    x_recon = self.net(x)
-                    recon_loss = reconstruction_loss(y, x_recon)
-                    testLoss += recon_loss
+                x_recon = self.net(x)
+                recon_loss = reconstruction_loss(y, x_recon)
+                testLoss += recon_loss
                 print(cnt)
                 cnt += 1
         self.testLoss = testLoss/cnt

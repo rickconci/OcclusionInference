@@ -12,6 +12,7 @@ from character_mod import Character
 from Clutter_mod import Clutter
 from utils_mod import shlex_cmd, DIGITS
 from io_mod import name_files
+import math
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -25,6 +26,27 @@ def truncated_normal_2d(minimum, maximum, mean, covariance):
         sample = np.random.multivariate_normal(mean, covariance, 1)
         if np.all(minimum <= sample) and np.all(sample <= maximum):
             return np.squeeze(sample)
+
+        
+def random_unoccluding_offset(rad=0.22):
+    pos_1_x = np.random.uniform(-0.25, 0.25, 1)
+    pos_1_y = np.random.uniform(-0.25, 0.25, 1)
+    
+    pos_2_x = np.random.uniform(-0.25, 0.25, 1)
+    pos_2_y = np.random.uniform(-0.25, 0.25, 1)
+    dist= math.sqrt((pos_1_x - pos_2_x )**2 + (pos_1_y - pos_2_y)**2)
+
+    while dist <= 2*rad:
+        print('retry')
+        pos_1_x = np.random.uniform(-0.25, 0.25, 1)
+        pos_1_y = np.random.uniform(-0.25, 0.25, 1)
+        pos_2_x = np.random.uniform(-0.25, 0.25, 1)
+        pos_2_y = np.random.uniform(-0.25, 0.25, 1)
+        dist= math.sqrt((pos_1_x - pos_2_x )**2 + (pos_1_y - pos_2_y)**2)
+    print('final dist', dist)
+    offset_mean = [(pos_1_x,pos_1_y),(pos_2_x,pos_2_y)]
+    return(offset_mean)
+
 
 def sample_clutter(**kwargs):
     '''
@@ -95,6 +117,10 @@ def sample_clutter(**kwargs):
     char_opt['image_size'] = image_size
     char_opt['linewidth'] = linewidth
     char_opt['fontsize'] = fontsize
+    
+    if offset_sample_type == 'random_unoccluded':
+        offset_mean = random_unoccluding_offset(rad=0.225)
+
     for i in range(n_letters):
         char_opt['identity'] = characters[i]
         char_opt['font'] = random.choice(font_set)
@@ -133,6 +159,9 @@ def sample_clutter(**kwargs):
         elif offset_sample_type == 'gaussian':
             char_opt['offset'] = np.random.multivariate_normal(offset_mean,
                                                                offset_cov)
+        elif offset_sample_type == 'random_unoccluded':
+            print(offset_mean[i])
+            char_opt['offset'] = offset_mean[i]
         else:
             raise ValueError('{0} not a valid offset sampling type'\
             .format(offset_sample_type))
@@ -154,3 +183,4 @@ def sample_clutter(**kwargs):
         clutter_sample[i] = Character(char_opt)
 
     return Clutter(clutter_sample)
+
