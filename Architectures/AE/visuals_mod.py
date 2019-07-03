@@ -38,10 +38,9 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 
     print(z_sample)
         
 
-    if model == 'conv_AE':
-        dist_samples = np.random.uniform(low=-35, high=35, size=1000)
-        dist_samples.sort()
-        dist_samples = torch.from_numpy(dist_samples[0::num_slice])
+    dist_samples = np.random.uniform(low=-35, high=35, size=1000)
+    dist_samples.sort()
+    dist_samples = torch.from_numpy(dist_samples[0::num_slice])
             
     traverse_input = torch.mul(torch.ones(num_frames*z_dim,1),z_sample)
 

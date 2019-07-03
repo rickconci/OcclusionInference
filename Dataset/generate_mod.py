@@ -48,6 +48,10 @@ def random_unoccluding_offset(rad=0.22):
     return(offset_mean)
 
 
+#test for exact equality
+def arreq_in_list(myarr, list_arrays):
+    return next((True for elem in list_arrays if np.array_equal(elem, myarr)), False)
+
 def sample_clutter(**kwargs):
     '''
     Returns a list of character objects that can be used to initialise a clutter
@@ -105,10 +109,22 @@ def sample_clutter(**kwargs):
     size_mean = kwargs.get('size_mean', (1, 1))
     size_cov = kwargs.get('size_cov', ((0, 0), (0, 0)))
     fontsize = kwargs.get('fontsize', 384)
+    generalisation_set = kwargs.get('generalisation_set', False)
+
+    g_char_set = (['3','2'],['2','3'],['9', '4'],['4','9'])
 
     # Sample characters without replacement
-    characters = np.random.choice(character_set, n_letters,
-                                  replace=False)
+    characters = np.random.choice(character_set, n_letters, replace=False)
+    
+    if generalisation_set == False:
+        while arreq_in_list(characters,g_char_set):
+            characters = np.random.choice(character_set, n_letters,replace=False)
+    elif generalisation_set == True:
+        choice_indices = np.random.choice(len(g_char_set), 1, replace=True)
+        characters = [g_char_set[i] for i in choice_indices]
+        characters= characters[0]
+        print(characters)
+    
     # Initialise the clutter sample list
     clutter_sample = [None] * n_letters
 
