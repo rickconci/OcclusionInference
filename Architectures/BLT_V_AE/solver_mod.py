@@ -25,8 +25,8 @@ import torchvision
 from torchvision.utils import make_grid, save_image
 
 
-from dataset_mod import return_data, MyDataset
-from model_mod import gauss_VAE, brnl_VAE, hybrid_VAE
+from dataset_mod import return_data_sup_encoder, return_data_unsupervised, MyDataset_unsup
+from model_BLT_VAE import BLT_encoder
 from visuals_mod import traverse_z, plotsave_tests, construct_z_hist
 
 
@@ -72,7 +72,46 @@ def kl_divergence_bernoulli(p):
 
     return total_kld, dimension_wise_kld, mean_kld
 
+def supervised_loss(output, target, encoder_target_type):
+    batch_size = output.size(0)
+    assert batch_size != 0
+    
+    if encoder_target_type =='joint':
+        output = output.float()
+        target = target.float()
+        output = F.sigmoid(output)
+        sup_loss = F.multilabel_soft_margin_loss(output, target, size_average=False).div(batch_size)
+    elif encoder_target_type =='black_white':
+        assert output.size() == target.size()
+        assert output.size(1) == 20
+        output = output.float()
+        target = target.long()
+        black_out = output[:,:10]
+        white_out = output[:,10:]
+        black_target = torch.topk(target[:,:10],1,dim=1 )[1]
+        white_target = torch.topk(target[:,10:], 1,dim=1 )[1]
+        black_target = torch.squeeze(black_target)
+        white_target = torch.squeeze(white_target)
+        zzz, idx = torch.max(F.softmax(black_out[0,:]) , 0)
+        print( idx ,black_target[0] )
+        
+        black_loss = F.cross_entropy(black_out, black_target, size_average=False).div(batch_size)
+        white_loss = F.cross_entropy(white_out, white_target, size_average=False).div(batch_size)
+        sup_loss = black_loss + white_loss
+        
+    elif encoder_target_type =='depth_black_white':
+        depth = F.sigmoid(output[:,:1])
+        black_out = output[:,1:11]
+        white_out = output[:,11:]
+        depth_target = target[:,:1]
+        black_target = target[:,1:11]
+        white_target = target[:,11:]
+        depth_loss = F.binary_cross_entropy(depth, depth_target,size_average=False).div(batch_size)
+        black_loss = F.cross_entropy(black, black_target, size_average=False).div(batch_size)
+        white_loss = F.cross_entropy(white, white_target, size_average=False).div(batch_size)
+        sup_loss = black_loss + white_loss + depth_loss
 
+    return sup_loss
 
 class Solver(object):
     def __init__(self, args):
@@ -82,8 +121,20 @@ class Solver(object):
         self.max_epoch = args.max_epoch
         self.global_iter = 0
         
+        
         self.z_dim = args.z_dim
-       
+        self.bs = args.batch_size
+        self.flip= args.flip
+        self.testing_method = args.testing_method
+        self.encoder_target_type = args.encoder_target_type
+        
+        if args.encoder_target_type == 'joint':
+            self.z_dim = 10
+        elif args.encoder_target_type == 'black_white':
+            self.z_dim = 20
+        elif args.encoder_target_type == 'depth_black_white':
+            self.z_dim = 21
+            
         if args.z_dim_bern is None and args.z_dim_gauss is None and args.model =='hybrid_VAE':
             self.z_dim_bern = math.floor(args.z_dim/2)
             self.z_dim_gauss = math.ceil(args.z_dim/2)
@@ -116,6 +167,8 @@ class Solver(object):
         elif args.model =='hybrid_VAE':
             net = hybrid_VAE(z_dim_bern= self.z_dim_bern, z_dim_gauss =self.z_dim_gauss,
                              n_filter = self.n_filter, nc = self.nc, train=True)
+        elif args.model =='BLT_encoder':
+            net = BLT_encoder(z_dim=self.z_dim, nc=self.nc, batch_size=self.bs)
         else:
             raise NotImplementedError('Model not correct')
         
@@ -172,21 +225,34 @@ class Solver(object):
         self.dset_dir = args.dset_dir
         self.dataset = args.dataset
         self.batch_size = args.batch_size
-        self.train_data_loader, self.test_data_loader, self.gnrl_data_loader = return_data(args)
+        
+        
+        if self.testing_method == 'supervised_encoder':
+             self.train_dl, self.test_dl  = return_data_sup_encoder(args)
+        elif self.testing_method == 'supervised_decoder':
+            self.train_dl, self_test_dl, self.gnrl_dl = return_data_sup_decoder(args)
+        elif self.testing_method =='unsupervised':
+            self.train_dl, self.test_dl, self.gnrl_dl = return_data_unsup(args)
+        #elif self.testing_method =='semisupervised':
+        else:
+            raise NotImplementedError
+ 
         self.gather = DataGather()
         
-        self.flip_idx = pickle.load( open( "{}train_idx_to_flip.p".format( args.dset_dir), "rb" ) )
-        self.flip_idx.sort()
-        print(self.flip_idx[0:20])
-        print(len(self.flip_idx), " flipped images!")
+        if self.flip==True:
+            self.flip_idx = pickle.load( open( "{}train_idx_to_flip.p".format(
+                args.dset_dir), "rb" ) )
+            self.flip_idx.sort()
+            print(self.flip_idx[0:20])
+            print(len(self.flip_idx), " flipped images!")
        
         
     def train(self):
         #self.net(train=True)
-        iters_per_epoch = len(self.train_data_loader)
+        iters_per_epoch = len(self.train_dl)
         print(iters_per_epoch)
         max_iter = self.max_epoch*iters_per_epoch
-        batch_size = self.train_data_loader.batch_size
+        batch_size = self.train_dl.batch_size
         current_idxs  = 0
         current_flip_idx = []
         count = 0
@@ -196,11 +262,11 @@ class Solver(object):
         pbar.update(self.global_iter)
         
         while not out:
-            for sample in self.train_data_loader:
+            for sample in self.train_dl:
                 self.global_iter += 1
                 pbar.update(1)
                 
-                if flip == True:
+                if self.flip == True:
                     if count%iters_per_epoch==0:
                         print("RESETTING COUNTER")
                         count=0
@@ -213,58 +279,71 @@ class Solver(object):
                         current_flip_idx_norm[:] = [i - count*batch_size for i in current_flip_idx]
                 else:
                     current_flip_idx_norm = None
-
+                    
+                    
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
                 
-                if self.model == 'gauss_VAE':
-                    x_recon, mu, logvar = self.net(x)
-                    recon_loss = reconstruction_loss(y, x_recon)
-                    total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(mu, logvar)
-                    vae_loss = recon_loss + self.beta*total_kld
-                elif self.model == 'brnl_VAE':
-                    x_recon, p_dist = self.net(x)
-                    recon_loss = reconstruction_loss(y, x_recon)
-                    total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(p_dist)
-                    vae_loss = recon_loss + self.gamma *total_kld  
-                elif self.model == 'hybrid_VAE':
-                    x_recon, p_dist, mu, logvar = self.net(x)
-                    recon_loss = reconstruction_loss(y, x_recon)
-                    total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
-                    total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(
-                        mu, logvar)
-                    vae_loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
+                if self.testing_method == 'supervised_encoder':
+                    final_out, _, _ = self.net(x)
+                    loss = supervised_loss(final_out, y, self.encoder_target_type)
+                    
+                if self.testing_method =='supervised_decoder':
+                    recon = self.net(x)
+                    loss = supervised_decoder_loss(recon, y)
+                if self.testing_method =='unsupervised':
+                    if self.model == 'gauss_BLT_VAE':
+                        x_recon, mu, logvar = self.net(x)
+                        recon_loss = reconstruction_loss(y, x_recon)
+                        total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(mu, logvar)
+                        loss = recon_loss + self.beta*total_kld
+                    elif self.model == 'brnl_BLT_VAE':
+                        x_recon, p_dist = self.net(x)
+                        recon_loss = reconstruction_loss(y, x_recon)
+                        total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(p_dist)
+                        loss = recon_loss + self.gamma *total_kld  
+                    elif self.model == 'hybrid_BLT_VAE':
+                        x_recon, p_dist, mu, logvar = self.net(x)
+                        recon_loss = reconstruction_loss(y, x_recon)
+                        total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
+                        total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(
+                            mu, logvar)
+                        loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
+                    
+                
                     
                 self.optim.zero_grad()
-                vae_loss.backward()
+                loss.backward()
                 self.optim.step()
                 
                 count +=1 
                 
-                if self.viz_on and self.global_iter%self.gather_step == 0:
-                    self.gather.insert(iter=self.global_iter,
-                                       p = p_dist.mean(0).data, 
-                                       mu=mu.mean(0).data, var=logvar.exp().mean(0).data,
-                                       recon_loss=recon_loss.data, total_kld_gauss=total_kld_gauss.data,
-                                       dim_wise_kld_gauss=dim_wise_kld_gauss.data,
-                                       mean_kld_gauss=mean_kld_gauss.data)
+                #if self.viz_on and self.global_iter%self.gather_step == 0:
+                #    self.gather.insert(iter=self.global_iter,
+                #                       p = p_dist.mean(0).data, 
+                #                       mu=mu.mean(0).data, var=logvar.exp().mean(0).data,
+                #                       recon_loss=recon_loss.data, total_kld_gauss=total_kld_gauss.data,
+                #                       dim_wise_kld_gauss=dim_wise_kld_gauss.data,
+                #                       mean_kld_gauss=mean_kld_gauss.data)
                     
                 if self.global_iter%self.display_step == 0:
-                    if self.model =='hybrid_VAE':
-                        pbar.write('[{}] recon_loss:{:.3f} total_kld_gauss:{:.3f} mean_kld_gauss:{:.3f} total_kld_bern:{:.3f} mean_kld_bern:{:.3f}'.format(
-                            self.global_iter, recon_loss.data,
-                            total_kld_gauss.data[0], mean_kld_gauss.data[0], total_kld_bern.data[0],
-                            mean_kld_bern.data[0]))
-                    else:
-                         pbar.write('[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f} '.format(
-                             self.global_iter, recon_loss.data, total_kld.data[0], mean_kld.data[0]))
+                    self.accuracy(final_out, y)
+                    print('[{}] minibatch_loss:{:.3f}'.format(self.global_iter, loss))
+                    #if self.model =='hybrid_VAE':
+                    #    pbar.write('[{}] recon_loss:{:.3f} total_kld_gauss:{:.3f} mean_kld_gauss:{:.3f} total_kld_bern:{:.3f} mean_kld_bern:{:.3f}'.format(
+                    #        self.global_iter, recon_loss.data,
+                    #        total_kld_gauss.data[0], mean_kld_gauss.data[0], total_kld_bern.data[0],
+                    #        mean_kld_bern.data[0]))
+                    #else:
+                    #     pbar.write('[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f} '.format(
+                    #         self.global_iter, recon_loss.data, total_kld.data[0], mean_kld.data[0]))
                         
-                    if self.model == 'gauss_VAE' or 'hybrid_VAE':
-                        var = logvar.exp().mean(0).data
-                        var_str = ''
-                        for j, var_j in enumerate(var):
-                            var_str += 'var{}:{:.4f} '.format(j+1, var_j)
-                        pbar.write(var_str)
+                 #   if self.model == 'gauss_VAE' or 'hybrid_VAE':
+                 #       var = logvar.exp().mean(0).data
+                 #       var_str = ''
+                 #       for j, var_j in enumerate(var):
+                 #           var_str += 'var{}:{:.4f} '.format(j+1, var_j)
+                 #       pbar.write(var_str)
                       
                     #if self.viz_on:
                     #    print("now visdoming!")
@@ -278,12 +357,12 @@ class Solver(object):
                     self.save_checkpoint('last')
                     pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
                     self.test_loss()
-                    self.gnrl_loss()
+                    #self.gnrl_loss()
                     #if self.testLoss  < 
-                    self.test_plots()
-                    with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                        myfile.write('\n[{}] recon_loss:{:.3f}, test_loss:{:.3f}, gnrl_loss:{:.3f}'.format(
-                            self.global_iter, recon_loss.data, self.testLoss, self.gnrlLoss))
+                    #self.test_plots()
+                    #with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                    #    myfile.write('\n[{}] recon_loss:{:.3f}, test_loss:{:.3f}, gnrl_loss:{:.3f}'.format(
+                    #        self.global_iter, recon_loss.data, self.testLoss, self.gnrlLoss))
                 
                 
                 if self.global_iter%500 == 0:
@@ -315,25 +394,48 @@ class Solver(object):
             total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
             total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(mu, logvar)
             vae_loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
-            return([vae_loss,recon_loss, total_kld_bern, total_kld_gauss] )  
-        
+            return([vae_loss,recon_loss, total_kld_bern, total_kld_gauss] ) 
+        elif model =='BLT_encoder':
+            final_out, _ , _= self.net(x)
+            loss = supervised_loss(final_out, y, self.encoder_target_type)
+            return([loss, final_out])
     
     def test_loss(self):
         print("Calculating test loss")
         testLoss = 0.0
         cnt = 0
         with torch.no_grad():
-            for sample in self.test_data_loader:
+            for sample in self.test_dl:
                 img = sample['x'].to(self.device)
                 trgt = sample['y'].to(self.device)
+                print(self.model)
                 testLoss= self.run_model(self.model, img, trgt)
+                if self.model =='BLT_encoder':
+                    final_out =testLoss[1]
+                    self.accuracy(final_out,trgt )
                 testLoss = testLoss[0]
                 cnt += 1
                 print(cnt)
         self.testLoss = testLoss.div(cnt)
-        self.testLoss = self.testLoss.numpy()[0]
+        self.testLoss = self.testLoss.numpy()#[0]
         print('[{}] test_Loss:{:.3f}'.format(self.global_iter, self.testLoss))
+    
+    def accuracy(self, outputs, targets):
+        assert outputs.size() == targets.size()
+        assert outputs.size(0) > 0
+        x = torch.topk(outputs,2,dim=1 )
+        y = torch.topk(targets,2,dim=1 )
+        outputs = x[1].numpy()
+        targets  = y[1].numpy()
+
+        accuracy = np.sum(outputs == targets)/outputs.size *100
+        print('[{}] accuracy:{:.3f}'.format(self.global_iter, accuracy))
+        return(accuracy)
         
+
+    
+    
+    
     def gnrl_loss(self):
         print("Calculating generalisation loss")
         gnrlLoss = 0.0

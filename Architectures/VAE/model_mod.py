@@ -15,9 +15,23 @@ def reparametrize_gaussian(mu, logvar):
 
 def reparametrize_bernoulli(p_dist):
     eps = Variable(p_dist.data.new(p_dist.size()).uniform_(0,1))
-    z = F.sigmoid(torch.log(eps+ 1e-20) - torch.log(1-eps+ 1e-20) + torch.log(p_dist+ 1e-20) - torch.log(1-p_dist+ 1e-20))
+    z = F.sigmoid(torch.log(eps+ 1e-20) - torch.log(1-eps+ 1e-20) + torch.log(
+        p_dist+ 1e-20) -torch.log(1-p_dist+ 1e-20))
     return z
 
+
+def spatial_broadcaster(Zs, h=32, w=32):
+    z_b = np.tile(z, (h,w,1))
+    z_b = torch.from_numpy(z_b).float()
+    x = np.linspace(-1,1,w)
+    y = np.linspace(-1,1,w)
+    x_b, y_b =np.meshgrid(x,y)
+    x_b = torch.from_numpy(x_b).float()
+    x_b = torch.unsqueeze(x_b, 2)
+    y_b = torch.from_numpy(y_b).float()
+    y_b = torch.unsqueeze(y_b, 2)
+    z_sb = torch.cat((z_b, x_b,y_b), -1)
+    return(z_sb)
 
 class View(nn.Module):
     def __init__(self, size):
@@ -27,8 +41,6 @@ class View(nn.Module):
     def forward(self, tensor):
         return tensor.view(self.size)
 
-
-    
 class gauss_VAE(nn.Module):
     def __init__(self, z_dim=20,n_filter=32, nc=1, train=True):
         super(gauss_VAE, self).__init__()
@@ -37,7 +49,7 @@ class gauss_VAE(nn.Module):
         self.z_dim_gauss = z_dim
         self.n_filter = n_filter
         self.train = train
-        #assume initial size is 64 x 64 
+        #assume initial size is 32 x 32 
         self.encoder = nn.Sequential(
             #nn.Conv2d(nc, 32, 4, 2, 1),          # B,  32, 32, 32
             #nn.ReLU(True),
@@ -254,11 +266,13 @@ class hybrid_VAE(nn.Module):
         elif self.train ==False:
             distributions = self._encode(x)
             p = distributions[:, :self.z_dim_bern]
-            mu = distributions[:,self.z_dim_bern:self.z_dim_gauss ]
+            mu = distributions[:,self.z_dim_bern:(self.z_dim_bern+self.z_dim_gauss) ]
             joint_z = torch.cat((p,mu), 1)
-            #print(joint_z.size())
+            print('joint_size', joint_z.size())
             x_recon = self._decode(joint_z)
+            print(x_recon.shape)
             x_recon = x_recon.view(x.size())
+            print(x_recon.shape)
             return x_recon
 
     def _encode(self, x):

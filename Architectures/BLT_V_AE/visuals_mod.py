@@ -8,14 +8,12 @@ import torchvision
 import shutil
 from tqdm import tqdm
 
-from dataset_mod import MyDataset
 
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf
 plt.rcParams['figure.figsize'] = [15, 15]
 
-from dataset_mod import MyDataset
-from model_mod import reparametrize_gaussian, reparametrize_bernoulli
+#from model_BLT_VAE import reparametrize_gaussian, reparametrize_bernoulli
 
 
 

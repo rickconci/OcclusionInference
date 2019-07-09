@@ -31,7 +31,7 @@ def main(args):
         print("Testing")
         net.test_loss()
         #net.gnrl_loss()
-        net.test_plots()
+        #net.test_plots()
 
 
 if __name__ == "__main__":
@@ -58,9 +58,11 @@ if __name__ == "__main__":
 
     parser.add_argument('--dset_dir', default='/train/', type=str, help='dataset directory')
     parser.add_argument('--dataset', default='digits_gray', type=str, help='dataset name')
-
+    parser.add_argument('--testing_method', default='unsupervised', type=str, help='types of supervised encoding')
+    parser.add_argument('--encoder_target_type', default='joint', type=str, help='types of supervised encoding')
     parser.add_argument('--image_size', default=32, type=int, help='image size. now only (64,64) is supported')
     parser.add_argument('--num_workers', default=8, type=int, help='dataloader num_workers')
+    parser.add_argument('--flip', default=False, type=str2bool, help='enable flipping of Zs during image inverse')
 
     parser.add_argument('--viz_on', default=False, type=str2bool, help='enable visdom visualization')
     parser.add_argument('--viz_name', default='main', type=str, help='visdom env name')
