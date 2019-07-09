@@ -81,8 +81,11 @@ def supervised_loss(output, target, encoder_target_type):
         y_hat = output.float()
         y = target.float()
         y_hat = F.sigmoid(y_hat)
-        
-        return(-torch.sum(y*torch.log(y_hat) + (1-y)*torch.log(1-y_hat)))
+        e = 1e-20
+        print(y[0,:].long())
+        print(y_hat[0,:])
+        sup_loss = (-torch.sum(y*torch.log(y_hat+e) + (1-y)*torch.log(1-y_hat+e))).div(batch_size)
+        print(sup_loss)
     elif encoder_target_type =='black_white':
         assert output.size() == target.size()
         assert output.size(1) == 20
