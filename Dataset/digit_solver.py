@@ -85,7 +85,7 @@ class Solver(object):
             raise ValueError('unrecognised offset option')
         
         if args.font_set == 'fixed':
-            self.font_set = ['helvetica-bold']#['Liberation-Sans-Bold']
+            self.font_set = ['Liberation-Sans-Bold']#['helvetica-bold']#
         elif args.font_set == 'random':
             #check if have arial-bold etc... with convert -list font 
             self.font_set = ['Liberation-Sans-Bold', 'helvetica-bold']
