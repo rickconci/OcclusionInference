@@ -97,8 +97,8 @@ def supervised_loss(output, target, encoder_target_type):
         white_target = torch.topk(target[:,10:], 1,dim=1 )[1]
         black_target = torch.squeeze(black_target)
         white_target = torch.squeeze(white_target)
-        zzz, idx = torch.max(F.softmax(black_out[0,:]) , 0)
-        print( idx ,black_target[0] )
+        #zzz, idx = torch.max(F.softmax(black_out[0,:]) , 0)
+        #print( idx ,black_target[0] )
         
         black_loss = F.cross_entropy(black_out, black_target, size_average=False).div(batch_size)
         white_loss = F.cross_entropy(white_out, white_target, size_average=False).div(batch_size)
@@ -117,6 +117,9 @@ def supervised_loss(output, target, encoder_target_type):
         sup_loss = black_loss + white_loss + depth_loss
 
     return sup_loss
+
+
+
 
 class Solver(object):
     def __init__(self, args):
@@ -189,9 +192,9 @@ class Solver(object):
         # copy the model to each device
         #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
         self.net = net.to(self.device) 
-        self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
-                                    betas=(self.beta1, self.beta2), 
-                               weight_decay=0.0005)
+        self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9) 
+        
+ 
         
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
         
@@ -270,7 +273,7 @@ class Solver(object):
             for sample in self.train_dl:
                 self.global_iter += 1
                 pbar.update(1)
-                
+               
                 if self.flip == True:
                     if count%iters_per_epoch==0:
                         print("RESETTING COUNTER")
@@ -284,7 +287,8 @@ class Solver(object):
                         current_flip_idx_norm[:] = [i - count*batch_size for i in current_flip_idx]
                 else:
                     current_flip_idx_norm = None
-                    
+                
+              
                     
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
@@ -292,7 +296,11 @@ class Solver(object):
                 if self.testing_method == 'supervised_encoder':
                     final_out, _, _ = self.net(x)
                     loss = supervised_loss(final_out, y, self.encoder_target_type)
-                    
+                    l2 = 0
+                    for p in self.net.parameters():
+                        l2 = l2 + p.pow(2).sum()
+                    print(0.0005 * l2)
+                    loss = loss + 0.0005 * l2
                 if self.testing_method =='supervised_decoder':
                     recon = self.net(x)
                     loss = supervised_decoder_loss(recon, y)
@@ -316,7 +324,7 @@ class Solver(object):
                         loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
                     
                 
-                    
+                self.adjust_learning_rate(self.optim, (count/iters_per_epoch))
                 self.optim.zero_grad()
                 loss.backward()
                 self.optim.step()
@@ -379,6 +387,13 @@ class Solver(object):
 
         pbar.write("[Training Finished]")
         pbar.close()
+    
+    def adjust_learning_rate(self, optimizer, epoch):
+        """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+        lr = self.lr * (0.1 ** (epoch / 40))
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+        print(lr)
     
     def run_model(self, model, x, y ):
         if model == 'gauss_VAE':

@@ -127,7 +127,7 @@ class MyDataset_encoder(Dataset):
         x = transform(x_sample)
         
         x[0,:,:][x[0,:,:] == torch.median(x[0,:,:])] = 0.5
-       
+        x[0,:,:][x[0,:,:] == torch.max(x[0,:,:])] = 0
 
         sample = {'x':x, 'y':y_sample}
         return sample

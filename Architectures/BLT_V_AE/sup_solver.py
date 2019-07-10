@@ -70,6 +70,11 @@ def supervised_loss(output, target, encoder_target_type):
 
     return sup_loss
 
+def adjust_learning_rate(optimizer, epoch):
+    """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+    lr = self.lr * (0.1 ** (epoch / 0.1))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
 
 class Solver(object):
     def __init__(self, args):

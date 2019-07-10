@@ -19,25 +19,38 @@ from utils_mod import shlex_cmd, DIGITS
 
 class Solver(object):
     def __init__(self, args):
-        self.filename = args.FILENAME
-        self.n_samples = args.n_samples
-        self.n_samples_gnrl = args.n_samples_gnrl
+        #Image Params
         self.n_letters = args.n_letters
-        self.offset = args.offset   
-        self.font_set = args.font_set
-        self.image_size = tuple(args.image_size)
-        self.linewidth = args.linewidth
-        self.fontsize = args.fontsize
-        self.character_set = DIGITS
+        self.offset = args.offset
         self.digit_colour_type = args.digit_colour_type
+        self.font_set = args.font_set
+        #image hyperparams
+        self.fontsize = args.fontsize
+        self.linewidth = args.linewidth
+        self.image_size = tuple(args.image_size)
+        self.character_set = DIGITS
+        #dataset hyperparams
+        self.filename = args.FILENAME
+        self.n_samples_tot = args.n_samples_tot
+        self.n_samples_test = args.n_samples_test
+        self.n_samples_gnrl = args.n_samples_gnrl
+        self.unflip = args.unflip
         
-        if args.digit_colour_type == "black_white" :
+        
+        if self.unflip:
+            print("UNFLIP IS ON: HALF OF IMAGES WILL NOT BE FLIPPED")
+            
+      
+        
+        #Image params
+        
+        if args.digit_colour_type == "b_w" :
             self.face_colour_set = [(0, 0, 0, 1.0),(255,255,255, 1.0)]
             self.edge_colour_set = self.face_colour_set
-        elif args.digit_colour_type == "black":
+        elif args.digit_colour_type == "b_w_e":
             self.face_colour_set = [(255,255,255, 1.0)]
             self.edge_colour_set = [(0, 0, 0, 1.0)]
-            self.linewidth = 30
+            self.linewidth = 25
             self.fontsize = 140
         else:
             print("unrecognised face_colour_set option")
@@ -48,7 +61,6 @@ class Solver(object):
             self.linewidth = 30
             self.fontsize = 140
      
-    
         if args.offset == 'fixed_unoccluded':
             self.offset_mean = [(-0.18,-0.18),(0.18,0.18)]
             self.offset_cov = ((0,0),(0,0))
@@ -66,6 +78,9 @@ class Solver(object):
             self.offset_mean =  (0, 0.054)
             self.offset_cov = ((-0.16, 0.16), (-0.10, 0.10))
             self.offset_sample_type = 'uniform'
+            self.double_input = raw_var("Double_input? (True or False):")
+            if self.double_input:
+                print("DOUBLE INPUT IS ON:both original and flipped in input")
         else:
             raise ValueError('unrecognised offset option')
         
@@ -97,34 +112,61 @@ class Solver(object):
         clutter_list = io_mod.name_files('{}/digts'.format(self.filename), clutter_list=clutter_list)
         io_mod.save_image_set(clutter_list, '{}/digts/digts.csv'.format(self.filename))
         
-        train_size = int(self.n_samples*0.98)
-        test_size = self.n_samples-train_size
+        train_size = int(self.n_samples_tot-self.n_samples_test)
+        test_size = self.n_samples_test
         print(train_size,test_size)
         
-        train_idx_to_flip = sorted(random.sample(range(0,train_size), int(train_size/2)))
-        test_idx_to_flip = sorted(random.sample(range(0,test_size), int(test_size*3/4)))
-        pickle.dump( train_idx_to_flip, open( "{}/digts/train_idx_to_flip.p".format(self.filename), "wb" ) )
+        
+        if self.unflip:
+            train_idx_to_flip = sorted(random.sample(range(0,train_size), int(train_size/2)))
+            test_idx_to_flip = sorted(random.sample(range(0,test_size), int(test_size*3/4)))
+            pickle.dump( train_idx_to_flip, open( "{}/digts/train_idx_to_flip.p".format(
+                self.filename), "wb" ) )
        
         
-        pbar = tqdm(total=self.n_samples)
+        pbar = tqdm(total=self.n_samples_tot)
         for i, cl in enumerate(clutter_list):
             pbar.update(1)
             if i < train_size:
-                if i in train_idx_to_flip:
-                    cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(self.filename,i)) 
-                    cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(self.filename,i), inverse=True)
+                
+                if self.unflip:
+                    if i in train_idx_to_flip:
+                        cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(
+                            self.filename,i)) 
+                        cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(
+                            self.filename,i), inverse=True)
+                    else:
+                        cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(
+                            self.filename,i))
+                        cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(
+                            self.filename,i))
+                
+                elif self.double_input:
+                    cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(
+                        self.filename,i))
+                    cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(
+                        self.filename,i+train_size), inverse=True)
+                    
+                    cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(
+                        self.filename,i), inverse=True)
+                    cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(
+                        self.filename,i+train_size))
+                    
                 else:
-                    cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(self.filename,i))
-                    cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(self.filename,i))
+                    cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(
+                        self.filename,i))
+                    cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(
+                        self.filename,i), inverse=True)
+                    
 
             elif i >= train_size:
-                if i in test_idx_to_flip:
-                    cl.render_occlusion(fname="{}/digts/test/orig/orig_{}".format(self.filename,i)) 
-                    cl.render_occlusion(fname="{}/digts/test/inverse/inverse_{}".format(self.filename,i), inverse=True)
-                else:
-                    cl.render_occlusion(fname="{}/digts/test/orig/orig_{}".format(self.filename,i)) 
-                    cl.render_occlusion(fname="{}/digts/test/inverse/inverse_{}".format(self.filename,i)) 
+                cl.render_occlusion(fname="{}/digts/test/orig/orig_{}".format(
+                        self.filename,i))
+                cl.render_occlusion(fname="{}/digts/test/inverse/inverse_{}".format(
+                        self.filename,i), inverse=True)
 
+                    
+                    
     def create_generalisation_set(self):
         print("Creating generalisation sets!")
         
@@ -148,15 +190,11 @@ class Solver(object):
         #clutter_list = io_mod.name_files('{}/digts'.format(self.filename), clutter_list=clutter_list)
         io_mod.save_image_set(clutter_list, '{}/digts/digts_gnrl.csv'.format(self.filename))
         
-        gnrl_idx_to_flip = random.sample(range(0,self.n_samples_gnrl), int(self.n_samples_gnrl*3/4))
-
         pbar = tqdm(total=self.n_samples_gnrl)
         for i, cl in enumerate(clutter_list):
             pbar.update(1)
-            if i in gnrl_idx_to_flip:
-                cl.render_occlusion(fname="{}/digts/gnrl/orig/orig_{}".format(self.filename,i)) 
-                cl.render_occlusion(fname="{}/digts/gnrl/inverse/inverse_{}".format(self.filename,i), inverse=True)
-            else:
-                cl.render_occlusion(fname="{}/digts/gnrl/orig/orig_{}".format(self.filename,i)) 
-                cl.render_occlusion(fname="{}/digts/gnrl/inverse/inverse_{}".format(self.filename,i), inverse=False)
+            cl.render_occlusion(fname="{}/digts/gnrl/orig/orig_{}".format(self.filename,i)) 
+            cl.render_occlusion(fname="{}/digts/gnrl/inverse/inverse_{}".format(
+                self.filename,i), inverse=True)
+           
             

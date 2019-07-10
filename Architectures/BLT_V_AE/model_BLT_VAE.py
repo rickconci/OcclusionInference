@@ -56,8 +56,8 @@ class BLT_encoder(nn.Module):
         read_out_0, indices_max =  F.max_pool2d_with_indices(Z_2_0, kernel_size=Z_2_0.size()[2:],
                                                                return_indices=True )
         final_z_0 = self.Lin(read_out_0.view(-1, 32))
-        print(torch.sum(torch.isnan(final_z_0)))
-        print(final_z_0[0,:])
+        #print(torch.sum(torch.isnan(final_z_0)))
+        #print(final_z_0[0,:])
         #t=1
         Z_1_1 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_0))) + self.W_t_1(self.LRN(F.relu(Z_2_0))) 
         Z_2_mpool_1, indices_hid  = self.MPool(Z_1_1)
@@ -65,8 +65,8 @@ class BLT_encoder(nn.Module):
         read_out_1, indices_max =  F.max_pool2d_with_indices(Z_2_1, kernel_size=Z_2_1.size()[2:],
                                                                return_indices=True )
         final_z_1 = self.Lin(read_out_1.view(-1, 32))
-        print(torch.sum(torch.isnan(final_z_1)))
-        print(final_z_1[0,:])
+        #print(torch.sum(torch.isnan(final_z_1)))
+        #print(final_z_1[0,:])
         #t=2
         Z_1_2 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_1))) + self.W_t_1(self.LRN(F.relu(Z_2_1)))
         Z_2_mpool_2, indices_hid  = self.MPool(Z_1_2)
@@ -74,8 +74,8 @@ class BLT_encoder(nn.Module):
         read_out_2, indices_max =  F.max_pool2d_with_indices(Z_2_2, kernel_size=Z_2_2.size()[2:],
                                                                return_indices=True )
         final_z_2 = self.Lin(read_out_2.view(-1, 32))
-        print(torch.sum(torch.isnan(final_z_2)))
-        print(final_z_2[0,:])
+        #print(torch.sum(torch.isnan(final_z_2)))
+        #print(final_z_2[0,:])
         #t=3
         Z_1_3 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_2))) + self.W_t_1(self.LRN(F.relu(Z_2_2)))
         Z_2_mpool_3, indices_hid  = self.MPool(Z_1_3)
