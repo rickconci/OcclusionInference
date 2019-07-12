@@ -39,58 +39,7 @@ def default_loader(path):
     else:
         return pil_loader(path)
     
-class MyDataset_unsup(Dataset):
-    def __init__(self,image_paths, target_paths, image_size ):
-        self.image_paths = image_paths
-        self.target_paths = target_paths
-        self.image_size = image_size
-    def __getitem__(self, index):
-        x_sample = default_loader(self.image_paths+ sorted(os.listdir(self.image_paths))[index])
-        y_sample = default_loader(self.target_paths+ sorted(os.listdir(self.target_paths))[index])
 
-        transform = transforms.Compose([
-            transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
-            transforms.Grayscale(),
-            transforms.ToTensor(),])
-        self.x = transform(x_sample)
-        self.y = transform(y_sample)
-        self.x[0,:,:][self.x[0,:,:] == torch.median(self.x[0,:,:])] = 0.5
-        self.y[0,:,:][self.y[0,:,:] == torch.median(self.y[0,:,:])] = 0.5
-
-        sample = {'x':self.x, 'y':self.y}
-        return sample
-        #return self.x, self.y
-
-    def __len__(self):
-        return len(os.listdir(self.image_paths))
-
-class MyDataset_decoder(Dataset):
-    def __init__(self,image_paths, target_paths, image_size ):
-        self.image_paths = image_paths
-        self.target_paths = target_paths
-        self.image_size = image_size
-        
-    def __getitem__(self, index):
-        x_sample = default_loader(self.image_paths+ sorted(os.listdir(self.image_paths))[index])
-        y_sample = default_loader(self.target_paths+ sorted(os.listdir(self.target_paths))[index])
-
-        transform = transforms.Compose([
-            transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
-            transforms.Grayscale(),
-            transforms.ToTensor(),])
-        self.x = transform(x_sample)
-        self.y = transform(y_sample)
-        self.x[0,:,:][self.x[0,:,:] == torch.median(self.x[0,:,:])] = 0.5
-        self.y[0,:,:][self.y[0,:,:] == torch.median(self.y[0,:,:])] = 0.5
-
-        sample = {'x':self.x, 'y':self.y}
-        return sample
-        #return self.x, self.y
-
-    def __len__(self):
-        return len(os.listdir(self.image_paths))
-    
-    
 class MyDataset_encoder(Dataset):
     def __init__(self,image_paths, target_paths, image_size, encoder_target_type, train_test):
         self.image_paths = image_paths
@@ -136,7 +85,33 @@ class MyDataset_encoder(Dataset):
     def __len__(self):
         return len(os.listdir(self.image_paths))
 
+class MyDataset_decoder(Dataset):
+    def __init__(self,image_paths, target_paths, image_size ):
+        self.image_paths = image_paths
+        self.target_paths = target_paths
+        self.image_size = image_size
+        
+    def __getitem__(self, index):
+        x_sample = default_loader(self.image_paths+ sorted(os.listdir(self.image_paths))[index])
+        y_sample = default_loader(self.target_paths+ sorted(os.listdir(self.target_paths))[index])
 
+        transform = transforms.Compose([
+            transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
+            transforms.Grayscale(),
+            transforms.ToTensor(),])
+        self.x = transform(x_sample)
+        self.y = transform(y_sample)
+        self.x[0,:,:][self.x[0,:,:] == torch.median(self.x[0,:,:])] = 0.5
+        self.y[0,:,:][self.y[0,:,:] == torch.median(self.y[0,:,:])] = 0.5
+
+        sample = {'x':self.x, 'y':self.y}
+        return sample
+        #return self.x, self.y
+
+    def __len__(self):
+        return len(os.listdir(self.image_paths))
+    
+    
     
 class one_hot_targets():
     def __init__(self, csv_path, train_test_type):
@@ -228,60 +203,6 @@ class one_hot_targets():
         
 
     
-def return_data_unsupervised(args):
-    name = args.dataset
-    dset_dir = args.dset_dir
-    batch_size = args.batch_size
-    num_workers = args.num_workers
-    image_size = args.image_size
-    
-    #assert image_size == 64, 'currently only image size of 64 is supported'
-    train_image_paths = "{}train/orig/".format(dset_dir)
-    train_target_paths = "{}train/inverse/".format(dset_dir)
-    print("train_image_paths: {}".format(train_image_paths))
-    dset_train = MyDataset
-    train_kwargs = {'image_paths':train_image_paths,
-                    'target_paths': train_target_paths,
-                    'image_size': image_size}
-    train_data = dset_train(**train_kwargs) 
-    train_loader = DataLoader(train_data,
-                              batch_size=batch_size,
-                              shuffle=False,
-                              num_workers=num_workers,
-                              pin_memory=True,
-                              drop_last=False)
-
-    test_image_paths = os.path.join(dset_dir + "test/orig/")
-    test_target_paths = os.path.join(dset_dir + "test/inverse/")
-    dset_test= MyDataset
-    test_kwargs = {'image_paths': test_image_paths,
-                    'target_paths': test_target_paths,
-                    'image_size': image_size}
-    test_data = dset_test(**test_kwargs)
-    test_loader = DataLoader(test_data,
-                              batch_size=200,
-                              shuffle=False,
-                              num_workers=num_workers,
-                              pin_memory=True,
-                              drop_last=False)
-    print('{} train images, {} test images"'.format(train_data.__len__(), test_data.__len__()))
-    
-    gnrl_image_paths = os.path.join(dset_dir + "gnrl/orig/")
-    gnrl_target_paths = os.path.join(dset_dir + "gnrl/inverse/")
-    dset_gnrl = MyDataset
-    gnrl_kwargs = {'image_paths':gnrl_image_paths,
-                    'target_paths': gnrl_target_paths,
-                    'image_size': image_size}
-    gnrl_data = dset_gnrl(**gnrl_kwargs) 
-    gnrl_loader = DataLoader(gnrl_data,
-                              batch_size=200,
-                              shuffle=False,
-                              num_workers=num_workers,
-                              pin_memory=True,
-                              drop_last=False)
-
-    return unsup_train_loader, unsup_test_loader, unsup_gnrl_loader
-
 def return_data_sup_encoder(args):
     name = args.dataset
     dset_dir = args.dset_dir

@@ -37,7 +37,8 @@ if __name__ == "__main__":
     parser.add_argument('--n_samples_gnrl', default=200, type=int, help='number of generalisation images')
     
     parser.add_argument('--unflip', default=False, type=bool, help='keep half images from being flipped')
-   
+    parser.add_argument('--double_input', default=False, type=bool, help='add orig and flipped to training')
+
    
     args = parser.parse_args()
 

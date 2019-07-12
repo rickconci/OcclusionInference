@@ -133,7 +133,7 @@ class Solver(object):
         self.net = net.to(self.device) 
         self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
                                     betas=(self.beta1, self.beta2), 
-                               weight_decay=0.01)
+                               weight_decay=0.001)
         
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
         

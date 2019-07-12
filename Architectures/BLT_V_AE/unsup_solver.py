@@ -25,8 +25,8 @@ import torchvision
 from torchvision.utils import make_grid, save_image
 
 
-from dataset_mod import return_data_sup_encoder, return_data_unsupervised, MyDataset_unsup
-from model_BLT_VAE import BLT_encoder
+from dataset_unsup import return_data_unsupervised, MyDataset_unsup
+from model_BLT_VAE import BLT_mod, BLT_orig, FF
 from visuals_mod import traverse_z, plotsave_tests, construct_z_hist
 
 
@@ -121,7 +121,7 @@ def supervised_loss(output, target, encoder_target_type):
 
 
 
-class Solver(object):
+class Solver_unsup(object):
     def __init__(self, args):
         self.use_cuda = args.cuda and torch.cuda.is_available()
         
@@ -192,7 +192,8 @@ class Solver(object):
         # copy the model to each device
         #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
         self.net = net.to(self.device) 
-        self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9) 
+        self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
+                                    betas=(self.beta1, self.beta2))
         
  
         
@@ -340,42 +341,40 @@ class Solver(object):
                 #                       mean_kld_gauss=mean_kld_gauss.data)
                     
                 if self.global_iter%self.display_step == 0:
-                    self.accuracy(final_out, y)
-                    print('[{}] minibatch_loss:{:.3f}'.format(self.global_iter, loss))
-                    #if self.model =='hybrid_VAE':
-                    #    pbar.write('[{}] recon_loss:{:.3f} total_kld_gauss:{:.3f} mean_kld_gauss:{:.3f} total_kld_bern:{:.3f} mean_kld_bern:{:.3f}'.format(
-                    #        self.global_iter, recon_loss.data,
-                    #        total_kld_gauss.data[0], mean_kld_gauss.data[0], total_kld_bern.data[0],
-                    #        mean_kld_bern.data[0]))
-                    #else:
-                    #     pbar.write('[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f} '.format(
-                    #         self.global_iter, recon_loss.data, total_kld.data[0], mean_kld.data[0]))
+                    if self.model =='hybrid_VAE':
+                        pbar.write('[{}] recon_loss:{:.3f} total_kld_gauss:{:.3f} mean_kld_gauss:{:.3f} total_kld_bern:{:.3f} mean_kld_bern:{:.3f}'.format(
+                            self.global_iter, recon_loss.data,
+                            total_kld_gauss.data[0], mean_kld_gauss.data[0], total_kld_bern.data[0],
+                            mean_kld_bern.data[0]))
+                    else:
+                         pbar.write('[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f} '.format(
+                             self.global_iter, recon_loss.data, total_kld.data[0], mean_kld.data[0]))
                         
-                 #   if self.model == 'gauss_VAE' or 'hybrid_VAE':
-                 #       var = logvar.exp().mean(0).data
-                 #       var_str = ''
-                 #       for j, var_j in enumerate(var):
-                 #           var_str += 'var{}:{:.4f} '.format(j+1, var_j)
-                 #       pbar.write(var_str)
+                    if self.model == 'gauss_VAE' or 'hybrid_VAE':
+                        var = logvar.exp().mean(0).data
+                        var_str = ''
+                        for j, var_j in enumerate(var):
+                            var_str += 'var{}:{:.4f} '.format(j+1, var_j)
+                        pbar.write(var_str)
                       
-                    #if self.viz_on:
-                    #    print("now visdoming!")
-                    #    self.gather.insert(images=y.data)
-                    #    self.gather.insert(images=F.sigmoid(x_recon).data)
-                    #    self.viz_reconstruction()
-                    #    self.viz_lines()
-                    #    self.gather.flush()
+                    if self.viz_on:
+                        print("now visdoming!")
+                        self.gather.insert(images=y.data)
+                        self.gather.insert(images=F.sigmoid(x_recon).data)
+                        self.viz_reconstruction()
+                        self.viz_lines()
+                        self.gather.flush()
                         
                 if self.global_iter%self.save_step == 0:
                     self.save_checkpoint('last')
                     pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
                     self.test_loss()
-                    #self.gnrl_loss()
+                    self.gnrl_loss()
                     #if self.testLoss  < 
-                    #self.test_plots()
-                    #with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                    #    myfile.write('\n[{}] recon_loss:{:.3f}, test_loss:{:.3f}, gnrl_loss:{:.3f}'.format(
-                    #        self.global_iter, recon_loss.data, self.testLoss, self.gnrlLoss))
+                    self.test_plots()
+                    with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                        myfile.write('\n[{}] recon_loss:{:.3f}, test_loss:{:.3f}, gnrl_loss:{:.3f}'.format(
+                            self.global_iter, recon_loss.data, self.testLoss, self.gnrlLoss))
                 
                 
                 if self.global_iter%500 == 0:

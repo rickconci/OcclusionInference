@@ -5,7 +5,8 @@ import argparse
 import numpy as np
 import torch
 
-from solver_mod import Solver
+from unsup_solver import Solver_unsup
+from sup_solver import Solver_sup
 from utils_mod import str2bool
 
 torch.backends.cudnn.enabled = True
@@ -18,20 +19,26 @@ def main(args):
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
     
-    net = Solver(args)
+    if args.testing_method == 'supervised_encoder'or 'supervised_decoder':
+        net = Solver_sup(args)
+    elif args.testing_method == 'unsupervised':
+        net = Solver_unsup(args)
+        
     if args.train:
         print("Training")
         net.train()
         print("Testing")
         net.test_loss()
-        net.gnrl_loss()
-        net.test_plots()
+        if args.testing_method == 'unsupervised':
+            net.gnrl_loss()
+            net.test_plots()
         
-    elif args.train==False:
+    elif not args.train:
         print("Testing")
         net.test_loss()
-        #net.gnrl_loss()
-        #net.test_plots()
+        if args.testing_method == 'unsupervised':
+            net.gnrl_loss()
+            net.test_plots()
 
 
 if __name__ == "__main__":
@@ -55,6 +62,7 @@ if __name__ == "__main__":
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
     parser.add_argument('--beta1', default=0.9, type=float, help='Adam optimizer beta1')
     parser.add_argument('--beta2', default=0.999, type=float, help='Adam optimizer beta2')
+    parser.add_argument('--l2_loss', default=0.0005, type=float, help='L2 loss coefficient')
 
     parser.add_argument('--dset_dir', default='/train/', type=str, help='dataset directory')
     parser.add_argument('--dataset', default='digits_gray', type=str, help='dataset name')

@@ -142,7 +142,7 @@ def sample_clutter(**kwargs):
         char_opt['font'] = random.choice(font_set)
         
         if n_letters ==2:
-            if digit_colour_type == 'black_white':
+            if digit_colour_type == 'b_w':
                 if i ==0:
                     char_opt['face_colour'] = random.choice(face_colour_set) 
                     char_opt['edge_colour'] = char_opt['face_colour'] 
@@ -153,7 +153,7 @@ def sample_clutter(**kwargs):
                     face_colour.flatten()
                     char_opt['face_colour'] = abs([255, 255, 255, 0] - face_colour[0]) 
                     char_opt['edge_colour'] = char_opt['face_colour']
-            elif digit_colour_type == 'black':
+            elif digit_colour_type == 'b_w_e':
                 char_opt['face_colour'] = random.choice(face_colour_set)
                 char_opt['edge_colour'] = random.choice(edge_colour_set) 
             

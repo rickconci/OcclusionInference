@@ -35,7 +35,7 @@ class Solver(object):
         self.n_samples_test = args.n_samples_test
         self.n_samples_gnrl = args.n_samples_gnrl
         self.unflip = args.unflip
-        
+        self.double_input = args.double_input
         
         if self.unflip:
             print("UNFLIP IS ON: HALF OF IMAGES WILL NOT BE FLIPPED")
@@ -50,8 +50,6 @@ class Solver(object):
         elif args.digit_colour_type == "b_w_e":
             self.face_colour_set = [(255,255,255, 1.0)]
             self.edge_colour_set = [(0, 0, 0, 1.0)]
-            self.linewidth = 25
-            self.fontsize = 140
         else:
             print("unrecognised face_colour_set option")
         
@@ -78,14 +76,11 @@ class Solver(object):
             self.offset_mean =  (0, 0.054)
             self.offset_cov = ((-0.16, 0.16), (-0.10, 0.10))
             self.offset_sample_type = 'uniform'
-            self.double_input = raw_var("Double_input? (True or False):")
-            if self.double_input:
-                print("DOUBLE INPUT IS ON:both original and flipped in input")
         else:
             raise ValueError('unrecognised offset option')
         
         if args.font_set == 'fixed':
-            self.font_set = ['Liberation-Sans-Bold']#['helvetica-bold']#
+            self.font_set = ['helvetica-bold'] #['Liberation-Sans-Bold']#]#
         elif args.font_set == 'random':
             #check if have arial-bold etc... with convert -list font 
             self.font_set = ['Liberation-Sans-Bold', 'helvetica-bold']
@@ -93,7 +88,7 @@ class Solver(object):
     def create_train_test_set(self):
         print("Creating train & test sets!")
         clutter_list = []
-        for i in range(self.n_samples):
+        for i in range(self.n_samples_tot):
             clutter_list += [sample_clutter(n_letters=self.n_letters,
                                             digit_colour_type = self.digit_colour_type,
                                             face_colour_set =self.face_colour_set, 
