@@ -33,60 +33,26 @@ class BLT_orig_encoder(nn.Module):
         
 
     def forward(self, x):
-        Z_1_0 = torch.zeros(self.bs, 32, 32, 32, requires_grad=True).to(self.device)
-        Z_1_1 = torch.zeros(self.bs, 32, 32, 32, requires_grad=True).to(self.device)
-        Z_1_2 = torch.zeros(self.bs, 32, 32, 32, requires_grad=True).to(self.device)
-        Z_1_3 = torch.zeros(self.bs, 32, 32, 32, requires_grad=True).to(self.device)
-        Z_2_0 = torch.zeros(self.bs, 32,16, 16, requires_grad=True).to(self.device)
-        Z_2_1 = torch.zeros(self.bs, 32,16, 16, requires_grad=True).to(self.device)
-        Z_2_2 = torch.zeros(self.bs, 32,16, 16, requires_grad=True).to(self.device)
-        Z_2_3 = torch.zeros(self.bs, 32,16, 16, requires_grad=True).to(self.device)
-        read_out_0 = torch.zeros(self.bs, 32, requires_grad=True).to(self.device)
-        read_out_1 = torch.zeros(self.bs, 32, requires_grad=True).to(self.device)
-        read_out_2 = torch.zeros(self.bs, 32, requires_grad=True).to(self.device)
-        final_z_0 = torch.zeros(self.bs, self.z_dim, requires_grad=True).to(self.device)
-        final_z_1 = torch.zeros(self.bs, self.z_dim, requires_grad=True).to(self.device)
-        final_z_2 = torch.zeros(self.bs, self.z_dim, requires_grad=True).to(self.device)
-        
-        #t=0
-        Z_1_0 = self.W_b_1(x)
-        Z_2_mpool_0, indices_hid  = self.MPool(Z_1_0)
-        Z_2_0 = self.W_b_2(self.LRN(F.relu(Z_2_mpool_0)))
-        read_out_0, indices_max =  F.max_pool2d_with_indices(Z_2_0, kernel_size=Z_2_0.size()[2:],
+        for t in range(4):
+            if t<1:
+                Z_1 = self.W_b_1(x)
+                Z_2_mpool, indices_hid  = self.MPool(Z_1)
+                Z_2 = self.W_b_2(self.LRN(F.relu(Z_2_mpool)))
+                read_out, indices_max =  F.max_pool2d_with_indices(self.LRN(F.relu(Z_2)), kernel_size=Z_2.size()[2:],
                                                                return_indices=True )
-        final_z_0 = self.Lin(read_out_0.view(-1, 32))
-        #print(torch.sum(torch.isnan(final_z_0)))
-        #print(final_z_0[0,:])
-        #t=1
-        Z_1_1 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_0))) + self.W_t_1(self.LRN(F.relu(Z_2_0))) 
-        Z_2_mpool_1, indices_hid  = self.MPool(Z_1_1)
-        Z_2_1 = self.W_b_2(self.LRN(F.relu(Z_2_mpool_1))) + self.W_l_2(self.LRN(F.relu(Z_2_0))) 
-        read_out_1, indices_max =  F.max_pool2d_with_indices(Z_2_1, kernel_size=Z_2_1.size()[2:],
+                final_z = self.Lin(read_out.view(-1, 32))
+            if t >=1:
+                Z_1 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1))) + self.W_t_1(self.LRN(F.relu(Z_2))) 
+                Z_2_mpool, indices_hid  = self.MPool(Z_1)
+                Z_2 = self.W_b_2(self.LRN(F.relu(Z_2_mpool))) + self.W_l_2(self.LRN(F.relu(Z_2))) 
+                read_out, indices_max =  F.max_pool2d_with_indices(self.LRN(F.relu(Z_2)), kernel_size=Z_2.size()[2:],
                                                                return_indices=True )
-        final_z_1 = self.Lin(read_out_1.view(-1, 32))
-        #print(torch.sum(torch.isnan(final_z_1)))
-        #print(final_z_1[0,:])
-        #t=2
-        Z_1_2 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_1))) + self.W_t_1(self.LRN(F.relu(Z_2_1)))
-        Z_2_mpool_2, indices_hid  = self.MPool(Z_1_2)
-        Z_2_2 = self.W_b_2(self.LRN(F.relu(Z_2_mpool_2))) + self.W_l_2(self.LRN(F.relu(Z_2_1))) 
-        read_out_2, indices_max =  F.max_pool2d_with_indices(Z_2_2, kernel_size=Z_2_2.size()[2:],
-                                                               return_indices=True )
-        final_z_2 = self.Lin(read_out_2.view(-1, 32))
-        #print(torch.sum(torch.isnan(final_z_2)))
-        #print(final_z_2[0,:])
-        #t=3
-        Z_1_3 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_2))) + self.W_t_1(self.LRN(F.relu(Z_2_2)))
-        Z_2_mpool_3, indices_hid  = self.MPool(Z_1_3)
-        Z_2_3 = self.W_b_2(self.LRN(F.relu(Z_2_mpool_3))) + self.W_l_2(self.LRN(F.relu(Z_2_2))) 
-        read_out_3, indices_max =  F.max_pool2d_with_indices(Z_2_3, kernel_size=Z_2_3.size()[2:],
-                                                               return_indices=True )
-        final_z_3 = self.Lin(read_out_3.view(-1, 32))
-        #print(torch.sum(torch.isnan(final_z_3)))
-        #print(final_z_3[0,:])
-        #print(final_z)
-        
-        return(final_z_3)
+                final_z = self.Lin(read_out.view(-1, 32))
+    
+        #print(torch.sum(torch.isnan(final_z)))
+        #print(F.sigmoid(final_z[0,:]))
+        #print(final_z.size())
+        return(final_z)
 
 class BLT_orig(nn.Module):
     def __init__(self, z_dim, nc, batch_size):
@@ -142,66 +108,24 @@ class BLT_mod_encoder(nn.Module):
         
 
     def forward(self, x):
-        Z_1_0 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        Z_1_1 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        Z_1_2 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        Z_1_3 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        Z_2_0 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_2_1 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_2_2 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_2_3 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_3_0 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        Z_3_1 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        Z_3_2 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        Z_3_3 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        read_z_0 = torch.zeros(self.bs, 256,  requires_grad=True).to(self.device)
-        read_z_1 = torch.zeros(self.bs, 256,  requires_grad=True).to(self.device)
-        read_z_2 = torch.zeros(self.bs, 256,  requires_grad=True).to(self.device)
-        read_z_3 = torch.zeros(self.bs, 256,  requires_grad=True).to(self.device)
-        final_z_0 = torch.zeros(self.bs, self.z_dim, requires_grad=True).to(self.device)
-        final_z_1 = torch.zeros(self.bs, self.z_dim,  requires_grad=True).to(self.device)
-        final_z_2 = torch.zeros(self.bs, self.z_dim,  requires_grad=True).to(self.device)
-        final_z_3 = torch.zeros(self.bs, self.z_dim,  requires_grad=True).to(self.device)
-        
-        #t=0
-        Z_1_0 = self.W_b_1(x)
-        Z_2_0 = self.W_b_2(self.LRN(F.relu(Z_1_0)))
-        Z_3_0 = self.W_b_3(self.LRN(F.relu(Z_2_0)))
-        read_z_0 = self.Lin_1(Z_3_0.view(-1, 32*4*4 ))
-        final_z_0 = self.Lin_2(read_z_0)
-        #print(torch.sum(torch.isnan(final_z_0)))
-
-        
-        
-        #t=1
-        Z_1_1 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_0))) + self.W_t_1(self.LRN(F.relu(Z_2_0))) 
-        Z_2_1 = self.W_b_2(self.LRN(F.relu(Z_1_1))) + self.W_l_2(self.LRN(F.relu(Z_2_0))) 
-        Z_3_1 = self.W_b_3(self.LRN(F.relu(Z_2_0))) + self.W_l_3(self.LRN(F.relu(Z_3_0))) 
-        read_z_1 = self.Lin_1(Z_3_1.view(-1, 32*4*4 ))
-        final_z_1 = self.Lin_2(read_z_1)
-        #print(torch.sum(torch.isnan(final_z_1)))
-        #print(final_z_1[0,:])
-        
-        #t=2
-        Z_1_2 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_1))) + self.W_t_1(self.LRN(F.relu(Z_2_1))) 
-        Z_2_2 = self.W_b_2(self.LRN(F.relu(Z_1_2))) + self.W_l_2(self.LRN(F.relu(Z_2_1))) 
-        Z_3_2 = self.W_b_3(self.LRN(F.relu(Z_2_2))) + self.W_l_3(self.LRN(F.relu(Z_3_1))) 
-        read_z_2 = self.Lin_1(Z_3_2.view(-1, 32*4*4 ))
-        final_z_2 = self.Lin_2(read_z_2)
-        #print(torch.sum(torch.isnan(final_z_2)))
-        #print(final_z_2[0,:])
-        
-        #t=3
-        Z_1_3 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1_2))) + self.W_t_1(self.LRN(F.relu(Z_2_2))) 
-        Z_2_3 = self.W_b_2(self.LRN(F.relu(Z_1_3))) + self.W_l_2(self.LRN(F.relu(Z_2_2))) 
-        Z_3_3 = self.W_b_3(self.LRN(F.relu(Z_2_3))) + self.W_l_3(self.LRN(F.relu(Z_3_2))) 
-        read_z_3 = self.Lin_1(Z_3_3.view(-1, 32*4*4 ))
-        final_z_3 = self.Lin_2(read_z_3)
-        
-        #print(torch.sum(torch.isnan(final_z_3)))
-        #print(final_z_3.size())
-        #print(final_z_3[0,:])
-        return(final_z_3)
+        for t in range(4):
+            if t <1:
+                Z_1 = self.W_b_1(x)
+                Z_2 = self.W_b_2(self.LRN(F.relu(Z_1)))
+                Z_3 = self.W_b_3(self.LRN(F.relu(Z_2)))
+                read_z = self.Lin_1(Z_3.view(-1, 32*4*4 ))
+                final_z = self.Lin_2(read_z)
+            elif t>=1:
+                Z_1 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1))) + self.W_t_1(self.LRN(F.relu(Z_2))) 
+                Z_2 = self.W_b_2(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) + self.W_t_2(self.LRN(F.relu(Z_3))) 
+                Z_3 = self.W_b_3(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3))) 
+                read_z = self.Lin_1(Z_3.view(-1, 32*4*4 ))
+                final_z = self.Lin_2(read_z)
+                
+        #print(torch.sum(torch.isnan(final_z)))
+        #print(final_z.size())
+        #print(final_z[0,:])
+        return(final_z)
 
 
 class BLT_mod_decoder(nn.Module):
@@ -240,54 +164,22 @@ class BLT_mod_decoder(nn.Module):
         nn.init.kaiming_uniform_(self.Lin_2.weight )
         
     def forward(self, z):
+        for t in range(4):
+            if t <1:
+                Z_1 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4) 
+                Z_2 = self.W_b_1(Z_1)
+                Z_3 = self.W_b_2(Z_2)
+                final_img = self.W_b_3(Z_3)
+            if t>=1:
+                Z_1 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4) + self.W_l_1(self.LRN(F.relu(Z_1))) + self.W_t_1(self.LRN(F.relu(Z_2)))
+                Z_2 = self.W_b_1(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) +  self.W_t_2(self.LRN(F.relu(Z_3)))
+                Z_3 = self.W_b_2(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3)))
+                final_img = self.W_b_3(Z_3)
         
-        Z_1_0 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        Z_1_1 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        Z_1_2 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        Z_1_3 = torch.zeros(self.bs, 32, 4, 4, requires_grad=True).to(self.device)
-        Z_2_0 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_2_1 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_2_2 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_2_3 = torch.zeros(self.bs, 32, 8, 8, requires_grad=True).to(self.device)
-        Z_3_0 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        Z_3_1 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        Z_3_2 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        Z_3_3 = torch.zeros(self.bs, 32, 16, 16, requires_grad=True).to(self.device)
-        final_img_0 = torch.zeros(self.bs, self.nc, 32, 32, requires_grad=True).to(self.device)
-        final_img_1 = torch.zeros(self.bs, self.nc, 32, 32, requires_grad=True).to(self.device)
-        final_img_2 = torch.zeros(self.bs, self.nc, 32, 32, requires_grad=True).to(self.device)
-        final_img_3 = torch.zeros(self.bs, self.nc, 32, 32, requires_grad=True).to(self.device)                                                             
-        #time 0
-        Z_1_0 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4) 
-        Z_2_0 = self.W_b_1(Z_1_0)
-        Z_3_0 = self.W_b_2(Z_2_0)
-        final_img_0 = self.W_b_3(Z_3_0)
-        
-        #time 1
-        Z_1_1 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4) + self.W_l_1(
-            self.LRN(F.relu(Z_1_0))) + self.W_t_1(self.LRN(F.relu(Z_2_0)))
-        Z_2_1 = self.W_b_1(Z_1_1) + self.W_l_2(self.LRN(F.relu(Z_2_0))) +  self.W_t_2(self.LRN(F.relu(Z_3_0)))
-        Z_3_1 = self.W_b_2(Z_2_1) + self.W_l_3(self.LRN(F.relu(Z_3_0)))
-        final_img_1 = self.W_b_3(Z_3_1)
-        
-        #time 2
-        Z_1_2 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4) + self.W_l_1(
-            self.LRN(F.relu(Z_1_1))) + self.W_t_1(self.LRN(F.relu(Z_2_1)))
-        Z_2_2 = self.W_b_1(Z_1_2) + self.W_l_2(self.LRN(F.relu(Z_2_1))) +  self.W_t_2(self.LRN(F.relu(Z_3_1)))
-        Z_3_2 = self.W_b_2(Z_2_2) + self.W_l_3(self.LRN(F.relu(Z_3_1)))
-        final_img_2 = self.W_b_3(Z_3_2)
-        
-        #time 3
-        Z_1_3 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4) + self.W_l_1(
-            self.LRN(F.relu(Z_1_2))) + self.W_t_1(self.LRN(F.relu(Z_2_2)))
-        Z_2_3 = self.W_b_1(Z_1_3) + self.W_l_2(self.LRN(F.relu(Z_2_2))) +  self.W_t_2(self.LRN(F.relu(Z_3_2)))
-        Z_3_3 = self.W_b_2(Z_2_3) + self.W_l_3(self.LRN(F.relu(Z_3_2)))
-        final_img_3 = self.W_b_3(Z_3_3)
-        
-        print(torch.sum(torch.isnan(final_z_3)))
-        print(final_z_3.size())
-        print(final_z_3[0,:])
-        return(final_img_3)
+        print(torch.sum(torch.isnan(final_img)))
+        print(final_img.size())
+        print(final_img[0,:])
+        return(final_img)
 
     
 class BLT_mod(nn.Module):

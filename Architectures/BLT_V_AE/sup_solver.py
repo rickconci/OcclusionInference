@@ -39,7 +39,7 @@ def supervised_encoder_loss(output, target, encoder_target_type):
         e = 1e-20
         #print(y[0,:].long())
         #print(y_hat[0,:])
-        sup_loss = (-torch.sum(y*torch.log(y_hat+e) + (1-y)*torch.log(1-y_hat+e))).div(batch_size)
+        sup_loss = (-torch.sum(y*torch.log(y_hat-e) + (1-y)*torch.log(1-y_hat+e))).div(batch_size)
         #print(sup_loss)
     elif encoder_target_type =='black_white':
         assert output.size() == target.size()
@@ -82,8 +82,40 @@ def supervised_decoder_loss(img, recon):
     recon_loss = F.mse_loss(recon, img, size_average=False).div(batch_size) #divide mse loss by batch size
     return recon_loss
 
+class DataGather(object):
+    def __init__(self):
+        self.data = self.get_empty_data_dict()
 
+    def get_empty_data_dict(self):
+        return dict(iter=[],
+                    recon_loss=[],
+                    total_kld=[],
+                    dim_wise_kld=[],
+                    mean_kld=[],
+                    mu=[],
+                    var=[],
+                    images=[],)
 
+    def insert(self, **kwargs):
+        for key in kwargs:
+            self.data[key].append(kwargs[key])
+
+    def flush(self):
+        self.data = self.get_empty_data_dict()
+        
+    def save_data(self, glob_iter, output_dir, name ):
+        if name == 'last':
+            pickle.dump( self.data, open( "{}/data_{}.p".format(output_dir,name ), "wb" ) )
+        else:
+            pickle.dump( self.data, open( "{}/data_{}.p".format(output_dir, glob_iter ), "wb" ) )
+
+    def load_data(self, glob_iter, output_dir, name):
+        if name=='last':
+            self.data = pickle.load( open( "{}/data_{}.p".format(output_dir,name ), "rb" ) )
+        else:
+            self.data = pickle.load( open( "{}/data_{}.p".format(output_dir,glob_iter ), "rb" ) )
+            
+            
 class Solver_sup(object):
     def __init__(self, args):
         self.use_cuda = args.cuda and torch.cuda.is_available()
@@ -214,6 +246,11 @@ class Solver_sup(object):
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
                 
+                #print(x.shape)
+                #for i in range(x.size(0)):
+                #    torchvision.utils.save_image( x[i,0,:,:] , '{}/x_{}_{}.png'.format(self.output_dir, self.global_iter, i)) 
+                #    print(y[i,:])
+                
                 if self.testing_method =='supervised_encoder':
                     loss, final_out = self.run_model(self.testing_method, x, y, self.l2_loss)
                     train_accuracy = self.get_accuracy(final_out, y)
@@ -289,14 +326,14 @@ class Solver_sup(object):
         cnt = 0
         with torch.no_grad():
             for sample in self.test_dl:
-                img = sample['x'].to(self.device)
-                trgt = sample['y'].to(self.device)
-               
-                testLoss= self.run_model(self.testing_method, img, trgt, self.l2_loss)
+                x = sample['x'].to(self.device)
+                y = sample['y'].to(self.device)
+                
+                testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                 if self.testing_method =='supervised_encoder':
-                    final_out =testLoss[1]
-                    test_accuracy += self.get_accuracy(final_out,trgt)
-                testLoss = testLoss[0]
+                    final_out =testLoss_list[1]
+                    test_accuracy += self.get_accuracy(final_out,y)
+                testLoss += testLoss_list[0]
                 cnt += 1
 
         testLoss = testLoss.div(cnt)

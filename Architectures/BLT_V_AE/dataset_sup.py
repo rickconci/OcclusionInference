@@ -41,12 +41,21 @@ def default_loader(path):
     
 
 class MyDataset_encoder(Dataset):
-    def __init__(self,image_paths, target_paths, image_size, encoder_target_type, train_test):
+    def __init__(self,image_paths, target_paths, image_size, encoder_target_type, train_test, train_data_size, test_data_size):
         self.image_paths = image_paths
         self.target_paths = target_paths
         self.image_size = image_size
         
-        targets = one_hot_targets(csv_path=target_paths, train_test_type=train_test)
+        if train_test == 'train':
+            print("Sorting train image files")
+            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(0,train_data_size)]       
+        elif train_test == 'test':
+            print("Sorting test image files")
+            tot_data_size = train_data_size + test_data_size
+            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(train_data_size, tot_data_size)] 
+            
+        
+        targets = one_hot_targets(target_paths,train_test, train_data_size,test_data_size)
         
         if encoder_target_type=='joint':
             self.digt_targets = targets.joint_targets()
@@ -63,9 +72,7 @@ class MyDataset_encoder(Dataset):
         
             
     def __getitem__(self, index):
-        x_sample = default_loader(self.image_paths+ sorted(os.listdir(self.image_paths))[index])
-        #print(type(self.digt_targets))
-        #print(self.digt_targets.shape)
+        x_sample = default_loader(self.files_img[index])
         y_sample = self.digt_targets[index,:]
 
         transform = transforms.Compose([
@@ -76,7 +83,6 @@ class MyDataset_encoder(Dataset):
         x = transform(x_sample)
         
         x[0,:,:][x[0,:,:] == torch.median(x[0,:,:])] = 0.5
-        x[0,:,:][x[0,:,:] == torch.max(x[0,:,:])] = 0
 
         sample = {'x':x, 'y':y_sample}
         return sample
@@ -86,14 +92,17 @@ class MyDataset_encoder(Dataset):
         return len(os.listdir(self.image_paths))
 
 class MyDataset_decoder(Dataset):
-    def __init__(self,image_paths, target_paths, image_size ):
+    def __init__(self,image_paths, target_paths, image_size , encoder_target_type, train_test):
         self.image_paths = image_paths
         self.target_paths = target_paths
         self.image_size = image_size
-        
+        print("Sorting image & targets files")
+        self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(len(os.listdir(image_paths)))]
+        self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(len(os.listdir(target_paths)))]
     def __getitem__(self, index):
-        x_sample = default_loader(self.image_paths+ sorted(os.listdir(self.image_paths))[index])
-        y_sample = default_loader(self.target_paths+ sorted(os.listdir(self.target_paths))[index])
+    
+        x_sample = default_loader(self.files_img[index])
+        y_sample = default_loader(self.files_tgt[index])
 
         transform = transforms.Compose([
             transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
@@ -114,12 +123,15 @@ class MyDataset_decoder(Dataset):
     
     
 class one_hot_targets():
-    def __init__(self, csv_path, train_test_type):
+    def __init__(self, csv_path, train_test_type, train_data_size,test_data_size):
         #file = '/Users/riccardoconci/Desktop/2_dig_fixed_random_bw/digts/digts.csv'
         data = pd.read_csv(csv_path, header=None)
-        self.train_data = data.iloc[:9800, :]
-        self.test_data = data.iloc[9800:, :]
+        
+        self.train_data = data.iloc[:train_data_size, :]
+        self.test_data = data.iloc[train_data_size:, :]
         self.train_test_type = train_test_type
+        self.train_data_size = train_data_size
+        self.test_data_size= test_data_size
         #print(self.train_test_type)
 
         if train_test_type=='train':
@@ -145,11 +157,11 @@ class one_hot_targets():
         if self.train_test_type=='train':
             back = self.digt_list_train[:,0]
             front =self.digt_list_train[:,1]
-            col_back = torch.LongTensor(self.cols_train[:,0]).view(9800, -1)
+            col_back = torch.LongTensor(self.cols_train[:,0]).view(self.train_data_size, -1)
         elif self.train_test_type=='test':
             back = self.digt_list_test[:,0]
             front =self.digt_list_test[:,1]
-            col_back = torch.LongTensor(self.cols_test[:,0]).view(200, -1)
+            col_back = torch.LongTensor(self.cols_test[:,0]).view(self.test_data_size, -1)
         
         n_values = np.max(back) + 1
         back_one_hot = torch.LongTensor(np.eye(n_values)[back])
@@ -166,13 +178,13 @@ class one_hot_targets():
             for i in range(self.train_data.shape[0]):
                 new_df[i,self.cols_train[i,0]] = self.digt_list_train[i,0]
                 new_df[i,self.cols_train[i,1]] = self.digt_list_train[i,1]
-            depth_black = torch.FloatTensor(self.cols_train[:,0]).view(9800, -1)
+            depth_black = torch.FloatTensor(self.cols_train[:,0]).view(self.train_data_size, -1)
         elif self.train_test_type=='test':
             new_df = np.zeros((self.test_data.shape[0], 2))
             for i in range(self.test_data.shape[0]):
                 new_df[i,self.cols_test[i,0]] = self.digt_list_test[i,0]
                 new_df[i,self.cols_test[i,1]] = self.digt_list_test[i,1]
-            depth_black = torch.FloatTensor(self.cols_test[:,0]).view(200, -1)
+            depth_black = torch.FloatTensor(self.cols_test[:,0]).view(self.test_data_size, -1)
             
         black = new_df[:,0].astype(int)
         black = new_df[:,0].astype(int)
@@ -213,6 +225,11 @@ def return_data_sup_encoder(args):
     encoder_target_type = args.encoder_target_type
     print("encoding:",encoder_target_type )
     
+    train_data_size = len(os.listdir("{}train/orig/".format(dset_dir)))
+    test_data_size =  len(os.listdir("{}test/orig/".format(dset_dir)))
+    
+    print('{} train images, {} test images"'.format(train_data_size, test_data_size))
+    
     train_image_paths = "{}train/orig/".format(dset_dir)
     train_target_paths = "{}digts.csv".format(dset_dir)
 
@@ -222,7 +239,9 @@ def return_data_sup_encoder(args):
                     'target_paths': train_target_paths,
                     'image_size': image_size, 
                    'encoder_target_type':encoder_target_type,
-                   'train_test': 'train'}
+                   'train_test': 'train',
+                   'train_data_size': train_data_size,
+                   'test_data_size':test_data_size }
 
     train_data = dset_train(**train_kwargs) 
     train_loader = DataLoader(train_data,
@@ -239,7 +258,10 @@ def return_data_sup_encoder(args):
                     'target_paths': test_target_paths,
                     'image_size': image_size, 
                    'encoder_target_type':encoder_target_type,
-                   'train_test': 'test'}
+                   'train_test': 'test',
+                   'train_data_size': train_data_size,
+                   'test_data_size':test_data_size }
+
     test_data = dset_test(**test_kwargs)
     test_loader = DataLoader(test_data,
                               batch_size=batch_size,
@@ -247,7 +269,7 @@ def return_data_sup_encoder(args):
                               num_workers=num_workers,
                               pin_memory=True,
                               drop_last=False)
-    print('{} train images, {} test images"'.format(train_data.__len__(), test_data.__len__()))
+   
 
 
     return train_loader, test_loader

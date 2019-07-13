@@ -44,9 +44,22 @@ class MyDataset_unsup(Dataset):
         self.image_paths = image_paths
         self.target_paths = target_paths
         self.image_size = image_size
+        
+        if train_test == 'train':
+            print("Sorting train image files")
+            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(0,train_data_size)]
+            self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(0,train_data_size)]
+        elif train_test == 'test':
+            print("Sorting test image files")
+            tot_data_size = train_data_size + test_data_size
+            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(train_data_size, tot_data_size)] 
+            self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(train_data_size, tot_data_size)]
+            
+        
     def __getitem__(self, index):
-        x_sample = default_loader(self.image_paths+ sorted(os.listdir(self.image_paths))[index])
-        y_sample = default_loader(self.target_paths+ sorted(os.listdir(self.target_paths))[index])
+        
+        x_sample = default_loader(self.files_img[index])
+        y_sample = default_loader(self.files_tgt[index])
 
         transform = transforms.Compose([
             transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
@@ -72,14 +85,19 @@ def return_data_unsupervised(args):
     num_workers = args.num_workers
     image_size = args.image_size
     
-    #assert image_size == 64, 'currently only image size of 64 is supported'
+    train_data_size = len(os.listdir("{}train/orig/".format(dset_dir)))
+    test_data_size =  len(os.listdir("{}test/orig/".format(dset_dir)))
+    print('{} train images, {} test images"'.format(train_data_size, test_data_size))
+    
     train_image_paths = "{}train/orig/".format(dset_dir)
     train_target_paths = "{}train/inverse/".format(dset_dir)
-    print("train_image_paths: {}".format(train_image_paths))
+
     dset_train = MyDataset
     train_kwargs = {'image_paths':train_image_paths,
                     'target_paths': train_target_paths,
-                    'image_size': image_size}
+                    'image_size': image_size,
+                   'train_data_size': train_data_size,
+                   'test_data_size':test_data_size }
     train_data = dset_train(**train_kwargs) 
     train_loader = DataLoader(train_data,
                               batch_size=batch_size,
@@ -93,7 +111,9 @@ def return_data_unsupervised(args):
     dset_test= MyDataset
     test_kwargs = {'image_paths': test_image_paths,
                     'target_paths': test_target_paths,
-                    'image_size': image_size}
+                    'image_size': image_size,
+                   'train_data_size': train_data_size,
+                   'test_data_size':test_data_size }
     test_data = dset_test(**test_kwargs)
     test_loader = DataLoader(test_data,
                               batch_size=200,

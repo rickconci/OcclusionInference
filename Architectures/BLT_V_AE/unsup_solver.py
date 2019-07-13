@@ -72,54 +72,26 @@ def kl_divergence_bernoulli(p):
 
     return total_kld, dimension_wise_kld, mean_kld
 
-    
-def supervised_loss(output, target, encoder_target_type):
-    batch_size = output.size(0)
-    assert batch_size != 0
-    
-    if encoder_target_type =='joint':
-        y_hat = output.float()
-        y = target.float()
-        y_hat = F.sigmoid(y_hat)
-        e = 1e-20
-        print(y[0,:].long())
-        print(y_hat[0,:])
-        sup_loss = (-torch.sum(y*torch.log(y_hat+e) + (1-y)*torch.log(1-y_hat+e))).div(batch_size)
-        print(sup_loss)
-    elif encoder_target_type =='black_white':
-        assert output.size() == target.size()
-        assert output.size(1) == 20
-        output = output.float()
-        target = target.long()
-        black_out = output[:,:10]
-        white_out = output[:,10:]
-        black_target = torch.topk(target[:,:10],1,dim=1 )[1]
-        white_target = torch.topk(target[:,10:], 1,dim=1 )[1]
-        black_target = torch.squeeze(black_target)
-        white_target = torch.squeeze(white_target)
-        #zzz, idx = torch.max(F.softmax(black_out[0,:]) , 0)
-        #print( idx ,black_target[0] )
-        
-        black_loss = F.cross_entropy(black_out, black_target, size_average=False).div(batch_size)
-        white_loss = F.cross_entropy(white_out, white_target, size_average=False).div(batch_size)
-        sup_loss = black_loss + white_loss
-        
-    elif encoder_target_type =='depth_black_white':
-        depth = F.sigmoid(output[:,:1])
-        black_out = output[:,1:11]
-        white_out = output[:,11:]
-        depth_target = target[:,:1]
-        black_target = target[:,1:11]
-        white_target = target[:,11:]
-        depth_loss = F.binary_cross_entropy(depth, depth_target,size_average=False).div(batch_size)
-        black_loss = F.cross_entropy(black, black_target, size_average=False).div(batch_size)
-        white_loss = F.cross_entropy(white, white_target, size_average=False).div(batch_size)
-        sup_loss = black_loss + white_loss + depth_loss
+class DataGather(object):
+    def __init__(self):
+        self.data = self.get_empty_data_dict()
 
-    return sup_loss
+    def get_empty_data_dict(self):
+        return dict(iter=[],
+                    recon_loss=[],
+                    total_kld=[],
+                    dim_wise_kld=[],
+                    mean_kld=[],
+                    mu=[],
+                    var=[],
+                    images=[],)
 
+    def insert(self, **kwargs):
+        for key in kwargs:
+            self.data[key].append(kwargs[key])
 
-
+    def flush(self):
+        self.data = self.get_empty_data_dict()
 
 class Solver_unsup(object):
     def __init__(self, args):
@@ -136,13 +108,6 @@ class Solver_unsup(object):
         self.testing_method = args.testing_method
         self.encoder_target_type = args.encoder_target_type
         
-        if args.encoder_target_type == 'joint':
-            self.z_dim = 10
-        elif args.encoder_target_type == 'black_white':
-            self.z_dim = 20
-        elif args.encoder_target_type == 'depth_black_white':
-            self.z_dim = 21
-            
         if args.z_dim_bern is None and args.z_dim_gauss is None and args.model =='hybrid_VAE':
             self.z_dim_bern = math.floor(args.z_dim/2)
             self.z_dim_gauss = math.ceil(args.z_dim/2)
@@ -167,16 +132,21 @@ class Solver_unsup(object):
         else:
             raise NotImplementedError
             
-        if args.model == 'gauss_VAE':
+        if args.model == 'FF_gauss_VAE':
             net = conv_VAE_32(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True)
-        elif args.model == 'brnl_VAE':
+        elif args.model == 'FF_brnl_VAE':
             net = brnl_VAE(z_dim=self.z_dim,n_filter=self.n_filter, nc=self.nc, train=True)
             self.beta = 0
-        elif args.model =='hybrid_VAE':
+        elif args.model =='FF_hybrid_VAE':
             net = hybrid_VAE(z_dim_bern= self.z_dim_bern, z_dim_gauss =self.z_dim_gauss,
                              n_filter = self.n_filter, nc = self.nc, train=True)
-        elif args.model =='BLT_encoder':
-            net = BLT_encoder(z_dim=self.z_dim, nc=self.nc, batch_size=self.bs)
+        elif args.model =='BLT_gauss_VAE':
+            net = BLT_gauss(z_dim=self.z_dim, nc=self.nc, batch_size=self.bs)
+        elif args.model =='BLT_bern_VAE':
+            net = BLT_bern(z_dim=self.z_dim, nc=self.nc, batch_size=self.bs)
+        elif args.model =='BLT_hybrid_VAE':
+            net = BLT_hybrid(zz_dim_bern= self.z_dim_bern, z_dim_gauss =self.z_dim_gauss,
+                             n_filter = self.n_filter, nc = self.nc, train=True)
         else:
             raise NotImplementedError('Model not correct')
         
@@ -192,11 +162,11 @@ class Solver_unsup(object):
         # copy the model to each device
         #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
         self.net = net.to(self.device) 
-        self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
-                                    betas=(self.beta1, self.beta2))
-        
- 
-        
+        if self.optim_type =='Adam':
+            self.optim = optim.Adam(self.net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        elif self.optim_type =='SGD':
+            optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
+            
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
         
         #print parameters in model
@@ -235,17 +205,8 @@ class Solver_unsup(object):
         self.dataset = args.dataset
         self.batch_size = args.batch_size
         
+        self.train_dl, self.test_dl, self.gnrl_dl = return_data_unsup(args)
         
-        if self.testing_method == 'supervised_encoder':
-             self.train_dl, self.test_dl  = return_data_sup_encoder(args)
-        elif self.testing_method == 'supervised_decoder':
-            self.train_dl, self_test_dl, self.gnrl_dl = return_data_sup_decoder(args)
-        elif self.testing_method =='unsupervised':
-            self.train_dl, self.test_dl, self.gnrl_dl = return_data_unsup(args)
-        #elif self.testing_method =='semisupervised':
-        else:
-            raise NotImplementedError
- 
         self.gather = DataGather()
         
         if self.flip==True:
@@ -294,35 +255,24 @@ class Solver_unsup(object):
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
                 
-                if self.testing_method == 'supervised_encoder':
-                    final_out, _, _ = self.net(x)
-                    loss = supervised_loss(final_out, y, self.encoder_target_type)
-                    l2 = 0
-                    for p in self.net.parameters():
-                        l2 = l2 + p.pow(2).sum()
-                    print(0.0005 * l2)
-                    loss = loss + 0.0005 * l2
-                if self.testing_method =='supervised_decoder':
-                    recon = self.net(x)
-                    loss = supervised_decoder_loss(recon, y)
-                if self.testing_method =='unsupervised':
-                    if self.model == 'gauss_BLT_VAE':
-                        x_recon, mu, logvar = self.net(x)
-                        recon_loss = reconstruction_loss(y, x_recon)
-                        total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(mu, logvar)
-                        loss = recon_loss + self.beta*total_kld
-                    elif self.model == 'brnl_BLT_VAE':
-                        x_recon, p_dist = self.net(x)
-                        recon_loss = reconstruction_loss(y, x_recon)
-                        total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(p_dist)
-                        loss = recon_loss + self.gamma *total_kld  
-                    elif self.model == 'hybrid_BLT_VAE':
-                        x_recon, p_dist, mu, logvar = self.net(x)
-                        recon_loss = reconstruction_loss(y, x_recon)
-                        total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
-                        total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(
-                            mu, logvar)
-                        loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
+                
+                if self.model == 'FF_gauss_VAE' or 'BLT_gauss_VAE':
+                    x_recon, mu, logvar = self.net(x)
+                    recon_loss = reconstruction_loss(y, x_recon)
+                    total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(mu, logvar)
+                    loss = recon_loss + self.beta*total_kld
+                elif self.model == 'FF_brnl_VAE' or 'BLT_brnl_VAE':
+                    x_recon, p_dist = self.net(x)
+                    recon_loss = reconstruction_loss(y, x_recon)
+                    total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(p_dist)
+                    loss = recon_loss + self.gamma *total_kld  
+                elif self.model == 'FF_hybrid_VAE' or 'BLT_hybrid_VAE':
+                    x_recon, p_dist, mu, logvar = self.net(x)
+                    recon_loss = reconstruction_loss(y, x_recon)
+                    total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
+                    total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(
+                        mu, logvar)
+                    loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
                     
                 
                 self.adjust_learning_rate(self.optim, (count/iters_per_epoch))

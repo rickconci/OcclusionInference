@@ -221,5 +221,98 @@ def plotsave_tests(NN, test_data, pdf_path, global_iter, type, n=20, ):
         plt.close()
 
     pdf.close()
-
     
+    
+
+def plotLearningCurves(solver):
+    """ plotting learning curves (training and testing losses and accuracies)
+    """
+    fig_lc = plt.figure(figsize = (8,8))
+    fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training acc: {:.2f}%, Final testing acc: {:.2f}%'.format(
+                       solver.net.get_n_params(trainable=True), solver.gather.data['train_acc'][-1]*100,
+                       solver.gather.data['test_acc'][-1]*100), fontsize=14)
+    plt.subplot(211)
+    plt.plot(solver.gather.data['iter'], solver.gather.data['train_loss'], 'r', linewidth=2.5, label = "train")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['test_loss'], 'b', linewidth=1, label = "test")
+    plt.xlabel("iterations")
+    plt.ylabel("loss")
+    #plt.title("losses")
+    plt.legend()
+    plt.grid(True)
+    plt.subplot(212)
+    plt.plot(solver.gather.data['iter'], solver.gather.data['train_acc'], 'r', linewidth=2.5, label = "train")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['test_acc'], 'b', linewidth=1, label = "test")
+    plt.xlabel("iterations")
+    plt.ylabel("accuracy")
+    #plt.title("accuracies")
+    plt.legend()
+    plt.grid(True)
+
+    return fig_lc
+    
+    
+    
+    
+    
+def plotFilters(self, figIdx = None, colorLimit = 'common'):
+    """ displays all filters
+    colorLimit: how are colors of the filter weights scaled
+        'common' = same color limit across all filters
+        'individual' = each filter has its own limits
+        'input' = all filters that connect to the same input (column) have the same limits
+        'output' = all filters that connect to the same output (row) have the same limits
+
+    """
+
+    # retrieve all weights and compute min/max for possible colorLimits
+    weights = [[[] for x in range(self.model.depth)] for y in range(self.model.depth)]
+    actGrandMax = -np.inf
+    actGrandMin = np.inf
+    actRowMax = -np.inf * np.ones([self.model.depth])
+    actRowMin = np.inf * np.ones([self.model.depth])
+    actColMax = -np.inf * np.ones([self.model.depth])
+    actColMin = np.inf * np.ones([self.model.depth])
+
+    for ii in range(self.model.depth):
+        for jj in range(self.model.depth):
+            weights[ii][jj] = self.model.getWeightsByMapIndices(ii,jj)
+            if len(weights[ii][jj]) > 0:
+                actGrandMax = max(actGrandMax, weights[ii][jj].max())
+                actGrandMin = min(actGrandMin, weights[ii][jj].min())
+                actRowMax[ii] = max(actRowMax[ii], weights[ii][jj].max())
+                actRowMin[ii] = min(actRowMin[ii], weights[ii][jj].min())
+                actColMax[jj] = max(actColMax[jj], weights[ii][jj].max())
+                actColMin[jj] = min(actColMin[jj], weights[ii][jj].min())
+
+    # plot filters
+    fig = plt.figure(figIdx)
+    fig.clf()
+
+    for ii in range(self.model.depth):
+        for jj in range(self.model.depth):
+            plt.subplot(self.model.depth+1, self.model.depth+1,
+                        (ii+1)*(self.model.depth+1) + jj + 1)
+            plt.xticks(fontsize=self.fontsize)
+            plt.yticks(fontsize=self.fontsize)
+            if len(weights[ii][jj]) > 0:
+                if colorLimit == 'common':
+                    plt.imshow(weights[ii][jj], aspect = 'auto',
+                                vmin = actGrandMin, vmax = actGrandMax)
+                elif colorLimit == 'individual':
+                    plt.imshow(weights[ii][jj], aspect = 'auto')
+                elif colorLimit == 'output':
+                    plt.imshow(weights[ii][jj], aspect = 'auto',
+                                  vmin = actRowMin[ii], vmax = actRowMax[ii])
+                elif colorLimit == 'input':
+                    plt.imshow(weights[ii][jj], aspect = 'auto',
+                                  vmin = actColMin[jj], vmax = actColMax[jj])
+                else:
+                    raise Exception('wrong input "%s" for argument colorLimit' % colorLimit)
+                plt.colorbar()
+
+            if ii == 0:
+                plt.title(self.model.mapnames[jj], fontdict={'fontsize': self.fontsize, 'fontweight': 'bold'})
+            if jj == 0:
+                plt.ylabel(self.model.mapnames[ii], fontdict={'fontsize': self.fontsize, 'fontweight': 'bold'})
+    plt.show()
+    return fig
