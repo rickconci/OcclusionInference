@@ -275,7 +275,7 @@ def plotLearningCurves(solver):
     plt.savefig('{}/Test_Loss_Curves.png'.format(solver.output_dir))
     plt.close()
     
-    if not solver.gather.data['grnlLoss'] :
+    if solver.gather.data['grnlLoss'] :
         plt.figure(figsize = (8,8))
         plt.subplot()
         plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")

@@ -37,9 +37,9 @@ def main(args):
         net.train()
         print("Testing")
         net.test_loss()
-        if args.testing_method == 'unsupervised':
-            net.gnrl_loss()
-            net.test_plots()
+        #if args.testing_method == 'unsupervised':
+        #    net.gnrl_loss()
+        #    net.test_plots()
         plotLearningCurves(net)
         
     elif not args.train:
