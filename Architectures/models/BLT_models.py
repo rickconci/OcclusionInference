@@ -14,8 +14,7 @@ def reparametrize_gaussian(mu, logvar):
 
 def reparametrize_bernoulli(p_dist):
     eps = Variable(p_dist.data.new(p_dist.size()).uniform_(0,1))
-    z = F.sigmoid(torch.log(eps - 1e-20) - torch.log(1-eps+ 1e-20) + torch.log(
-        p_dist- 1e-20) -torch.log(1-p_dist+ 1e-20))
+    z = F.sigmoid(torch.log(eps + 1e-20) - torch.log(1-eps+ 1e-20) + torch.log(p_dist + 1e-20) - torch.log(1-p_dist+ 1e-20))
     return z
 
 
@@ -85,14 +84,12 @@ class BLT_orig(nn.Module):
     #    return(elf.decoder(z))
         
 class BLT_mod_encoder(nn.Module):
-    def __init__(self, z_dim, nc):
+    def __init__(self,  z_dim_bern, z_dim_gauss, nc):
         super(BLT_mod_encoder, self).__init__()
-        self.nc = nc
-        self.z_dim = z_dim
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print("using BLT_mod_encoder")
         
-        self.W_b_1 = nn.Conv2d(1, 32, kernel_size= 4, stride = 2, padding = 1, bias=True)   # bs 32 16 16
+        self.W_b_1 = nn.Conv2d(nc, 32, kernel_size= 4, stride = 2, padding = 1, bias=True)   # bs 32 16 16
         self.W_l_1 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
         self.W_t_1 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=2, padding=1, output_padding=1 ,bias=False )
         
@@ -104,12 +101,7 @@ class BLT_mod_encoder(nn.Module):
         self.W_l_3 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
         
         self.Lin_1 = nn.Linear(32*4*4, 256, bias=True)
-        #if type == 'gaussian':
-        self.Lin_2 = nn.Linear(256, self.z_dim*2, bias=True)
-        #elif type == 'bernoulli':
-        #    self.Lin_2 = nn.Linear(256, self.z_dim, bias=True)
-        #elif type == 'hybrid':
-        #    self.Lin_2 = nn.Linear(256, z_dim_brnl +2*z_dim_gauss, bias=True)
+        self.Lin_2 = nn.Linear(256, z_dim_bern+2*z_dim_gauss, bias=True)
         
         self.LRN = nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
         
@@ -147,14 +139,12 @@ class BLT_mod_encoder(nn.Module):
 
 
 class BLT_mod_decoder(nn.Module):
-    def __init__(self, z_dim, nc):
+    def __init__(self, z_dim_bern, z_dim_gauss, nc):
         super(BLT_mod_decoder, self).__init__()
-        self.nc = nc
-        self.z_dim = z_dim
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         print("using BLT_mod_decoder")
         
-        self.Lin_1 = nn.Linear(self.z_dim, 256, bias=True)
+        self.Lin_1 = nn.Linear( z_dim_bern + z_dim_gauss, 256, bias=True)
         self.Lin_2 = nn.Linear(256, 32*4*4, bias=True) 
         
         self.W_b_1 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=2, padding=1, output_padding=1 ,bias=True ) # bs 32 8 8
@@ -219,20 +209,19 @@ class BLT_mod(nn.Module):
         return(self.decoder(z))
     
 class BLT_gauss_VAE(nn.Module):
-    def __init__(self, z_dim_tot, nc):
+    def __init__(self, z_dim_bern, z_dim_gauss, nc):
         super(BLT_gauss_VAE, self).__init__()
-        self.z_dim_tot = z_dim_tot
-        self.encoder = BLT_mod_encoder(z_dim_tot, nc )
-        self.decoder = BLT_mod_decoder(z_dim_tot, nc)
+        self.z_dim_tot = z_dim_gauss
+        self.encoder = BLT_mod_encoder(z_dim_bern, z_dim_gauss, nc )
+        self.decoder = BLT_mod_decoder(z_dim_bern, z_dim_gauss, nc)
         print("using BLT_gauss_VAE")
+        print("z_dim_gauss:" , z_dim_gauss, "z_dim_bern:", z_dim_bern)
     def forward(self, x,  train=True ):
         if train==True:
             distributions = self._encode(x)
             print(distributions.shape)
             mu = distributions[:, :self.z_dim_tot]
             logvar = distributions[:, self.z_dim_tot:]
-            print(mu.shape)
-            print(logvar.shape)
             z = reparametrize_gaussian(mu, logvar)
             x_recon = self._decode(z)
             x_recon = x_recon.view(x.size())
@@ -252,12 +241,13 @@ class BLT_gauss_VAE(nn.Module):
     
     
 class BLT_brnl_VAE(nn.Module):
-    def __init__(self, z_dim_tot, nc):
+    def __init__(self, z_dim_bern, z_dim_gauss, nc):
         super(BLT_brnl_VAE, self).__init__()
-        self.z_dim_tot = z_dim_tot
-        self.encoder = BLT_mod_encoder(z_dim_tot, nc )
-        self.decoder = BLT_mod_decoder(z_dim_tot, nc)
+        self.z_dim_tot = z_dim_bern
+        self.encoder = BLT_mod_encoder(z_dim_bern, z_dim_gauss, nc )
+        self.decoder = BLT_mod_decoder(z_dim_bern, z_dim_gauss, nc)
         print('using BLT_brnl_VAE')
+        print("z_dim_gauss:" , z_dim_gauss, "z_dim_bern:", z_dim_bern)
     def forward(self, x, current_flip_idx_norm=None, train=True ):
        
         if train==True:
@@ -268,9 +258,9 @@ class BLT_brnl_VAE(nn.Module):
                 ones = torch.ones(p.size(0),1)
                 indx_vec = indx_vec + ones[current_flip_idx_norm]
                 delta_mat = torch.zeros(p.size())
-                    
-                p[current_flip_idx_norm,1] = 1 - p[current_flip_idx_norm,1] 
+                
             z = reparametrize_bernoulli(p_dist)
+            
             x_recon = self._decode(z)
             x_recon = x_recon.view(x.size())
             return x_recon, p_dist
@@ -293,9 +283,10 @@ class BLT_hybrid_VAE(nn.Module):
         self.z_dim_gauss = z_dim_gauss
         self.z_dim_bern = z_dim_bern
         self.z_dim_tot = z_dim_gauss + z_dim_bern
-        self.encoder = BLT_mod_encoder(z_dim_tot, nc )
-        self.decoder = BLT_mod_decoder(z_dim_tot, nc)
+        self.encoder = BLT_mod_encoder(z_dim_bern, z_dim_gauss, nc)
+        self.decoder = BLT_mod_decoder(z_dim_bern, z_dim_gauss, nc)
         print('using BLT_hybrid_VAE')
+        print("z_dim_gauss:" , z_dim_gauss, "z_dim_bern:", z_dim_bern)
     def forward(self, x, current_flip_idx_norm=None, train=True ):
         if train==True:
             distributions = self._encode(x)

@@ -56,8 +56,6 @@ class Solver(object):
         if self.n_letters >2:
             self.face_colour_set = [(0, 0, 0, 1.0)]
             self.edge_colour_set = [(255,255,255, 1.0)]
-            self.linewidth = 30
-            self.fontsize = 140
      
         if args.offset == 'fixed_unoccluded':
             self.offset_mean = [(-0.18,-0.18),(0.18,0.18)]
@@ -73,8 +71,8 @@ class Solver(object):
             self.offset_cov = ((0,0),(0,0))
             self.offset_sample_type = 'gaussian'
         elif args.offset == 'random_occluded':
-            self.offset_mean =  (0, 0.054)
-            self.offset_cov = ((-0.16, 0.16), (-0.10, 0.10))
+            self.offset_mean =  (0, 0)
+            self.offset_cov = ((-0.10, 0.10), (-0.01, 0.20))
             self.offset_sample_type = 'uniform'
         else:
             raise ValueError('unrecognised offset option')

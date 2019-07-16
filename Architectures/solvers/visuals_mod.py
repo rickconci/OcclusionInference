@@ -231,30 +231,63 @@ def plotsave_tests(NN, test_data, pdf_path, global_iter, type, n=20, ):
 def plotLearningCurves(solver):
     """ plotting learning curves (training and testing losses and accuracies)
     """
-    fig_lc = plt.figure(figsize = (8,8))
-    fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training acc: {:.2f}%, Final testing acc: {:.2f}%'.format(
-                       solver.net.get_n_params(trainable=True), solver.gather.data['train_acc'][-1]*100,
-                       solver.gather.data['test_acc'][-1]*100), fontsize=14)
-    plt.subplot(211)
-    plt.plot(solver.gather.data['iter'], solver.gather.data['train_loss'], 'r', linewidth=2.5, label = "train")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['test_loss'], 'b', linewidth=1, label = "test")
+    
+    
+    #fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training acc: {:.2f}%, Final testing acc: {:.2f}%'.format(
+     #                  solver.net.get_n_params(trainable=True), solver.gather.data['train_acc'][-1]*100,
+     #                  solver.gather.data['test_acc'][-1]*100), fontsize=14)
+    plt.figure(figsize = (8,8))
+    plt.subplot()
+    plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'b', linewidth=2, label = "test loss")
     plt.xlabel("iterations")
     plt.ylabel("loss")
     #plt.title("losses")
     plt.legend()
     plt.grid(True)
-    plt.subplot(212)
-    plt.plot(solver.gather.data['iter'], solver.gather.data['train_acc'], 'r', linewidth=2.5, label = "train")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['test_acc'], 'b', linewidth=1, label = "test")
+    plt.savefig('{}/Train_Test_loss_Curves.png'.format(solver.output_dir))
+    plt.close()
+    
+    plt.figure(figsize = (8,8))
+    plt.subplot()
+    plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'coral', linewidth=2.5, label = "trainLoss")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['train_recon_loss'], 'seagreen', linewidth=2.5, label = "train_recon_loss")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['train_KL_loss'], 'dodgerblue', linewidth=2.5, label = "train_KL_loss")
     plt.xlabel("iterations")
-    plt.ylabel("accuracy")
-    #plt.title("accuracies")
+    plt.ylabel("loss")
+    #plt.title("losses")
     plt.legend()
     plt.grid(True)
-
-    return fig_lc
+    plt.savefig('{}/Train_Loss_Curves.png'.format(solver.output_dir))
+    plt.close()
     
+    plt.figure(figsize = (8,8))
+    plt.subplot()
+    plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'coral', linewidth=2.5, label = "testLoss")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['test_recon_loss'], 'seagreen', linewidth=2.5, label = "train_recon_loss")
+    plt.plot(solver.gather.data['iter'], solver.gather.data['test_kl_loss'], 'dodgerblue', linewidth=2.5, label = "test KL_loss")
+    plt.xlabel("iterations")
+    plt.ylabel("loss")
+    #plt.title("losses")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig('{}/Test_Loss_Curves.png'.format(solver.output_dir))
+    plt.close()
     
+    if not solver.gather.data['grnlLoss'] :
+        plt.figure(figsize = (8,8))
+        plt.subplot()
+        plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['grnlLoss'], 'coral', linewidth=2.5, label = "grnlLoss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_recon_loss'], 'seagreen', linewidth=2.5, label = "gnrl_recon_loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_kl_loss'], 'dodgerblue', linewidth=2.5, label = "test gnrl_KL_loss")
+        plt.xlabel("iterations")
+        plt.ylabel("loss")
+        #plt.title("losses")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig('{}/Gnrl_Loss_Curves.png'.format(solver.output_dir))
     
     
     

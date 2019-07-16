@@ -7,10 +7,12 @@ import torch
 
 import sys
 sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
+#sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 
 from solvers.unsup_solver import Solver_unsup
 from solvers.sup_solver import Solver_sup
 from solvers.utils_mod import str2bool
+from solvers.visuals_mod import plotLearningCurves
 
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
@@ -38,6 +40,7 @@ def main(args):
         if args.testing_method == 'unsupervised':
             net.gnrl_loss()
             net.test_plots()
+        plotLearningCurves(net)
         
     elif not args.train:
         print("Testing")
@@ -45,6 +48,7 @@ def main(args):
         if args.testing_method == 'unsupervised':
             net.gnrl_loss()
             net.test_plots()
+        plotLearningCurves(net)
 
 
 if __name__ == "__main__":

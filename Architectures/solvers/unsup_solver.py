@@ -26,6 +26,8 @@ from torchvision.utils import make_grid, save_image
 
 import sys
 sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
+#sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
+
 from data_loaders.dataset_unsup import return_data_unsupervised 
 from models.BLT_models import BLT_gauss_VAE, BLT_brnl_VAE, BLT_hybrid_VAE
 from models.FF_VAE_models import FF_gauss_VAE, FF_brnl_VAE, FF_hybrid_VAE
@@ -38,6 +40,7 @@ def reconstruction_loss(x, x_recon):
     #reconstruction loss for GAUSSIAN distribution of pixel values (not Bernoulli)
     batch_size = x.size(0)
     assert batch_size != 0
+    
     x_recon = F.sigmoid(x_recon)
     recon_loss = F.mse_loss(x_recon, x, size_average=False).div(batch_size) #divide mse loss by batch size
     return recon_loss
@@ -64,15 +67,14 @@ def kl_divergence_bernoulli(p):
     assert batch_size != 0
     if p.data.ndimension() == 4:
         p = p.view(p.size(0), p.size(1))
-
+    
     prior= torch.tensor(0.5)
     klds = torch.mul(p, torch.log(p + 1e-20) - torch.log(prior)) + torch.mul(
-        1 - p, torch.log(1 - p + 1e-20) - torch.log(1 - prior))
-    
+        1 - p, torch.log(1 - p + 1e-20) - torch.log(1 - prior))    
     total_kld = klds.sum(1).mean(0, True)
     dimension_wise_kld = klds.mean(0)
     mean_kld = klds.mean(1).mean(0, True)
-
+    
     return total_kld, dimension_wise_kld, mean_kld
 
 class DataGather(object):
@@ -81,13 +83,15 @@ class DataGather(object):
 
     def get_empty_data_dict(self):
         return dict(iter=[],
-                    recon_loss=[],
-                    total_kld=[],
-                    dim_wise_kld=[],
-                    mean_kld=[],
-                    mu=[],
-                    var=[],
-                    images=[],)
+                    trainLoss = [],
+                    train_recon_loss=[],
+                    train_KL_loss=[],
+                    testLoss=[],
+                    test_recon_loss=[],
+                    test_kl_loss=[],
+                    grnlLoss=[],
+                    gnrl_recon_loss=[],
+                   gnrl_kl_loss=[])
 
     def insert(self, **kwargs):
         for key in kwargs:
@@ -102,11 +106,8 @@ class DataGather(object):
         else:
             pickle.dump( self.data, open( "{}/data_{}.p".format(output_dir, glob_iter ), "wb" ) )
 
-    def load_data(self, glob_iter, output_dir, name):
-        if name=='last':
-            self.data = pickle.load( open( "{}/data_{}.p".format(output_dir,name ), "rb" ) )
-        else:
-            self.data = pickle.load( open( "{}/data_{}.p".format(output_dir,glob_iter ), "rb" ) )
+    def load_data(self, filename):
+        self.data = pickle.load( open( filename), "rb" ) 
             
 
 class Solver_unsup(object):
@@ -128,9 +129,14 @@ class Solver_unsup(object):
             if args.model =='FF_hybrid_VAE' or args.model =='BLT_hybrid_VAE':
                 self.z_dim_bern = math.floor(args.z_dim/2)
                 self.z_dim_gauss = math.ceil(args.z_dim/2)
-            else:
-                self.z_dim_bern = args.z_dim_bern
-                self.z_dim_gauss = args.z_dim_gauss
+            elif args.model =='FF_bnrl_VAE' or args.model =='BLT_brnl_VAE':
+                 self.z_dim_bern = self.z_dim
+            elif args.model =='FF_gauss_VAE' or args.model =='BLT_gauss_VAE':
+                 self.z_dim_gauss = self.z_dim
+                
+        else:
+            self.z_dim_bern = args.z_dim_bern
+            self.z_dim_gauss = args.z_dim_gauss
             
         self.n_filter = args.n_filter
 
@@ -151,16 +157,15 @@ class Solver_unsup(object):
             
         if args.model == 'FF_gauss_VAE':
             net = FF_gauss_VAE(self.z_dim, self.n_filter, self.nc)
-            self.gamma = 0
         elif args.model == 'FF_brnl_VAE':
             net = FF_brnl_VAE(self.z_dim, self.n_filter, self.nc)
-            self.beta = 0
         elif args.model =='FF_hybrid_VAE':
             net = FF_hybrid_VAE(self.z_dim_bern,self.z_dim_gauss, self.n_filter, self.nc)
+        
         elif args.model =='BLT_gauss_VAE':
-            net = BLT_gauss_VAE(self.z_dim, self.nc)
-        elif args.model =='BLT_bern_VAE':
-            net = BLT_bern_VAE(self.z_dim, self.nc)
+            net = BLT_gauss_VAE(0, self.z_dim_gauss, self.nc)
+        elif args.model =='BLT_brnl_VAE':
+            net = BLT_brnl_VAE(self.z_dim_bern, 0, self.nc)
         elif args.model =='BLT_hybrid_VAE':
             net = BLT_hybrid_VAE(self.z_dim_bern, self.z_dim_gauss, self.nc)
         else:
@@ -181,7 +186,7 @@ class Solver_unsup(object):
         if args.optim_type =='Adam':
             self.optim = optim.Adam(self.net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
         elif args.optim_type =='SGD':
-            optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
+            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
             
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
         
@@ -198,21 +203,23 @@ class Solver_unsup(object):
         self.win_kld = None
         self.win_mu = None
         self.win_var = None
-        if self.viz_on:
-            self.viz = visdom.Visdom(port=self.viz_port)
+        #if self.viz_on:
+        #    self.viz = visdom.Visdom(port=self.viz_port)
             
+        self.gather = DataGather()
+        
+        self.save_output = args.save_output
+        self.output_dir = args.output_dir #os.path.join(args.output_dir, args.viz_name)
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir, exist_ok=True)
+        
         self.ckpt_dir = os.path.join(args.ckpt_dir, args.viz_name)
         if not os.path.exists(self.ckpt_dir):
             os.makedirs(self.ckpt_dir, exist_ok=True)
         self.ckpt_name = args.ckpt_name
         if self.ckpt_name is not None:
             self.load_checkpoint(self.ckpt_name)
-
-        self.save_output = args.save_output
-        self.output_dir = args.output_dir #os.path.join(args.output_dir, args.viz_name)
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir, exist_ok=True)
-
+            
         self.gather_step = args.gather_step
         self.display_step = args.display_step
         self.save_step = args.save_step
@@ -223,7 +230,7 @@ class Solver_unsup(object):
         
         self.train_dl, self.test_dl, self.gnrl_dl, self.test_data, self.gnrl_data = return_data_unsupervised(args)
         
-        self.gather = DataGather()
+       
         
         if self.flip==True:
             self.flip_idx = pickle.load( open( "{}train_idx_to_flip.p".format(
@@ -278,21 +285,21 @@ class Solver_unsup(object):
                     recon_loss = reconstruction_loss(y, x_recon)
                     total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(mu, logvar)
                     KL_loss = self.beta*total_kld
-                    loss = recon_loss + self.beta*total_kld
+                    loss = recon_loss + KL_loss
                 elif self.model == 'FF_brnl_VAE' or self.model == 'BLT_brnl_VAE':
                     x_recon, p_dist = self.net(x, train=True)
                     recon_loss = reconstruction_loss(y, x_recon)
-                    total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(p_dist)
+                    total_kld, dim_wise_kld, mean_kld = kl_divergence_bernoulli(p_dist)
                     KL_loss = self.gamma *total_kld 
-                    loss = recon_loss + self.gamma *total_kld  
+                    loss = recon_loss + KL_loss
                 elif self.model == 'FF_hybrid_VAE' or self.model =='BLT_hybrid_VAE':
                     x_recon, p_dist, mu, logvar = self.net(x, train=True)
                     recon_loss = reconstruction_loss(y, x_recon)
                     total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
                     total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(
                         mu, logvar)
-                    KL_loss = self.gamma *total_kld + self.beta*total_kld_gauss
-                    loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
+                    KL_loss = self.gamma *total_kld_bern + self.beta*total_kld_gauss
+                    loss = recon_loss + KL_loss
                     
                 
                 self.adjust_learning_rate(self.optim, (count/iters_per_epoch))
@@ -303,18 +310,26 @@ class Solver_unsup(object):
                 count +=1 
                 
                 if self.global_iter%self.gather_step == 0:
-                    if self.model == 'FF_hybrid_VAE' or self.model=='BLT_hybrid_VAE':
-                        self.gather.insert(iter=self.global_iter, p_dist = p_dist.mean(0).data,
-                                           mu=mu.mean(0).data, var=logvar.exp().mean(0).data,
-                                           recon_loss=recon_loss.data, total_kld_gauss=total_kld_gauss.data,
-                                           dim_wise_kld_gauss=dim_wise_kld_gauss.data,
-                                           mean_kld_gauss=mean_kld_gauss.data)
+                    self.test_loss()
+                    if self.gnrl_dl != 0:
+                        self.gnrl_loss()
+                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                            myfile.write('\n[{}] train_loss:{:.3f},  train_recon_loss:{:.3f}, train_KL_loss:{:.3f}, test_loss:{:.3f}, test_recon_loss:{:.3f} , test_KL_loss:{:.3f}, gnrl_loss:{:.3f}, gnrl_recon_loss:{:.3f}, gnrl_KL_loss:{:.3f}'.format(self.global_iter, float(loss.data), float(recon_loss.data), float(KL_loss.data), self.testLoss, self.test_recon_loss, self.test_kl_loss, self.grnlLoss, self.gnrl_recon_loss, self.gnrl_kl_loss))
+                            
+                        self.gather.insert(iter=self.global_iter, trainLoss = loss.data, 
+                                           train_recon_loss=recon_loss.data, train_KL_loss =KL_loss.data,
+                                           testLoss = self.testLoss, test_recon_loss =self.test_recon_loss,
+                                          test_kl_loss = self.test_kl_loss, grnlLoss = self.grnlLoss,
+                                           gnrl_recon_loss =  self.gnrl_recon_loss,gnrl_kl_loss = self.gnrl_kl_loss  )
                     else:
-                        self.gather.insert(iter=self.global_iter,
-                                           recon_loss=recon_loss.data, total_kld=total_kld.data,
-                                           dim_wise_kld=dim_wise_kld.data,
-                                           mean_kld=mean_kld.data)
-                    
+                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                            myfile.write('\n[{}] train_loss:{:.3f},  train_recon_loss:{:.3f}, train_KL_loss:{:.3f}, test_loss:{:.3f}, test_recon_loss:{:.3f} , test_KL_loss:{:.3f}'.format(self.global_iter, float(loss.data), float(recon_loss.data), float(KL_loss.data), self.testLoss, self.test_recon_loss, self.test_kl_loss,))
+                             
+                        self.gather.insert(iter=self.global_iter, trainLoss = loss.data, 
+                                    train_recon_loss=recon_loss.data, train_KL_loss =KL_loss.data,
+                                    testLoss = self.testLoss, test_recon_loss =self.test_recon_loss,
+                                        test_kl_loss = self.test_kl_loss )
+                
                 if self.global_iter%self.display_step == 0:
                     if self.model =='hybrid_VAE' or self.model =='BLT_hybrid_VAE':
                         pbar.write('[{}] recon_loss:{:.3f} total_kld_gauss:{:.3f} mean_kld_gauss:{:.3f} total_kld_bern:{:.3f} mean_kld_bern:{:.3f}'.format(
@@ -341,20 +356,22 @@ class Solver_unsup(object):
                     #    self.gather.flush()
                         
                 if self.global_iter%self.save_step == 0:
-                    self.save_checkpoint('last')
-                    pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
+                    self.save_checkpoint('last') 
+                    oldtestLoss = self.testLoss
                     self.test_loss()
-                    if self.gnrl_loader != 0:
+                    if self.gnrl_dl != 0:
                         self.gnrl_loss()
+                    print('old test loss', oldtestLoss,'current test loss', self.testLoss )
+                    if self.testLoss  < oldtestLoss:
+                        self.save_checkpoint('best')
+                        pbar.write('Saved best checkpoint(iter:{})'.format(self.global_iter))
                     
-                    #if self.testLoss  < 
                     self.test_plots()
-                    with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                        myfile.write('\n[{}] train_loss:{:.3f},  train_recon_loss:{:.3f}, train_KL_loss:{:.3f}, test_loss:{:.3f}, test_recon_loss:{:.3f} , test_KL_loss:{:.3f}, gnrl_loss:{:.3f}, gnrl_recon_loss:{:.3f}, gnrl_KL_loss:{:.3f}'.format(self.global_iter, loss.data, recon_loss.data, KL_loss.data, self.testLoss, self.test_recon_loss, self.test_kl_loss, self.grnlLoss, self.gnrl_recon_loss, self.gnrl_kl_loss))
-                
-                
+                    self.gather.save_data(self.glob_iter, self.output_dir, 'last' )
+                    
                 if self.global_iter%500 == 0:
                     self.save_checkpoint(str(self.global_iter))
+                    self.gather.save_data(self.glob_iter, self.output_dir, None )
 
                 if self.global_iter >= max_iter:
                     out = True
@@ -379,7 +396,7 @@ class Solver_unsup(object):
         elif model == 'FF_brnl_VAE' or model =='BLT_brnl_VAE':
             x_recon , p_dist = self.net(x, train=True)
             recon_loss = reconstruction_loss(y, x_recon)
-            total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(p_dist)
+            total_kld, dim_wise_kld, mean_kld = kl_divergence_bernoulli(p_dist)
             vae_loss = recon_loss + self.gamma *total_kld  
             return([recon_loss, self.gamma *total_kld  ] )
         elif model == 'FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
@@ -394,17 +411,19 @@ class Solver_unsup(object):
     def test_loss(self):
         print("Calculating test loss")
         testLoss = 0.0
+        recon_loss = 0.0
+        kl_loss = 0.0
         cnt = 0
+    
         with torch.no_grad():
             for sample in self.test_dl:
                 img = sample['x'].to(self.device)
                 trgt = sample['y'].to(self.device)
                 testLoss_list = self.run_model(self.model, img, trgt)
-                recon_loss = testLoss_list[0]
-                kl_loss = testLoss_list[1]
-                testLoss += recon_loss + kl_loss
+                recon_loss += testLoss_list[0]
+                kl_loss += testLoss_list[1]
                 cnt += 1
-        
+        testLoss += recon_loss + kl_loss
         testLoss = testLoss.div(cnt)
         self.testLoss = float(testLoss.cpu().numpy())
         recon_loss = recon_loss.div(cnt)
@@ -412,7 +431,6 @@ class Solver_unsup(object):
         kl_loss = kl_loss.div(cnt)
         self.test_kl_loss = float(kl_loss.cpu().numpy())
        
-        
         print('[{}] test_Loss:{:.3f}, test_recon_loss:{:.3f}, test_KL_loss:{:.3f}'.format(
             self.global_iter, self.testLoss,self.test_recon_loss, self.test_kl_loss))
     
@@ -420,17 +438,18 @@ class Solver_unsup(object):
     def gnrl_loss(self):
         print("Calculating generalisation loss")
         gnrlLoss = 0.0
+        recon_loss = 0.0
+        kl_loss = 0.0
         cnt = 0
         with torch.no_grad():
             for sample in self.gnrl_dl:
                 img = sample['x'].to(self.device)
                 trgt = sample['y'].to(self.device)
                 gnrlLoss_list = self.run_model(self.model, img, trgt)
-                recon_loss = gnrlLoss_list[0]
-                kl_loss = gnrlLoss_list[1]
-                grnlLoss = recon_loss + kl_loss
+                recon_loss += gnrlLoss_list[0]
+                kl_loss += gnrlLoss_list[1]
                 cnt += 1
-        
+        grnlLoss = recon_loss + kl_loss
         grnlLoss = grnlLoss.div(cnt)
         self.grnlLoss = float(grnlLoss.cpu().numpy())  #[0]
         recon_loss = recon_loss.div(cnt)
@@ -462,8 +481,8 @@ class Solver_unsup(object):
                 test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), '{}/sampling_z_{}.png'.
                                          format(self.output_dir, self.global_iter))        
         
-        #print("Constructing Z hist!")
-        #construct_z_hist(net_copy, self.train_dl, self.global_iter, self.output_dir,dim='depth')
+        print("Constructing Z hist!")
+        construct_z_hist(net_copy, self.train_dl, self.global_iter, self.output_dir,dim='depth')
 
         
         #select test image to traverse 
@@ -481,7 +500,7 @@ class Solver_unsup(object):
         
         print('Reconstructing generalisation images!')
         with torch.no_grad():
-            plotsave_tests(net_copy, self.grnl_data, self.output_dir, self.global_iter, type="Gnrl", n=20 )
+            plotsave_tests(net_copy, self.gnrl_data, self.output_dir, self.global_iter, type="Gnrl", n=20 )
 
     
     def save_checkpoint(self, filename, silent=True):
@@ -520,8 +539,14 @@ class Solver_unsup(object):
                 self.net.load_state_dict(checkpoint['model_states']['net'])
             self.optim.load_state_dict(checkpoint['optim_states']['optim'])
             print("=> loaded checkpoint '{} (iter {})'".format(file_path, self.global_iter))
+            
         else:
             print("=> no checkpoint found at '{}'".format(file_path))
+            
+        file_path_2 = os.path.join(self.output_dir, filename)
+        if os.path.isfile(file_path_2):
+            self.gather.load_data(file_path_2)
+       
 
             
         
