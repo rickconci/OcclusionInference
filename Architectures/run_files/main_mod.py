@@ -37,16 +37,16 @@ def main(args):
         net.train()
         print("Testing")
         net.test_loss()
-        #if args.testing_method == 'unsupervised':
-        #    net.gnrl_loss()
-        #    net.test_plots()
+        if args.testing_method == 'unsupervised':
+            net.gnrl_loss()
+            net.test_plots()
         plotLearningCurves(net)
         
     elif not args.train:
         print("Testing")
         net.test_loss()
         if args.testing_method == 'unsupervised':
-            net.gnrl_loss()
+            #net.gnrl_loss()
             net.test_plots()
         plotLearningCurves(net)
 
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     parser.add_argument('--max_epoch', default=60, type=float, help='maximum training epoch')
     parser.add_argument('--batch_size', default=128, type=int, help='batch size')
     parser.add_argument('--optim_type', default='Adam', type=str, help='type of optimiser')
-    parser.add_argument('--spatial_broadcaster', default=False, type=str2bool, help='use spatial broacast decoder')
+    parser.add_argument('--spatial_broadcast_decoder', default=False, type=str2bool, help='use spatial broacast decoder')
 
     
     parser.add_argument('--z_dim', default=20, type=int, help='dimension of the representation z')

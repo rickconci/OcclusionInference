@@ -47,18 +47,18 @@ class MyDataset_unsup(Dataset):
         
         if train_test_gnrl == 'train':
             print("Sorting train image files")
-            self.files_img = [image_paths+ 'orig_{}.png'.format(i) for i in range(0,train_data_size)]
-            self.files_tgt = [target_paths+ 'inverse_{}.png'.format(i) for i in range(0,train_data_size)]
+            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(0,train_data_size)]
+            self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(0,train_data_size)]
         elif train_test_gnrl == 'test':
             print("Sorting test image files")
             tot_data_size = train_data_size + test_data_size
             self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(train_data_size, tot_data_size)] 
-            self.files_tgt = [target_paths+ 'inverse_{}.png'.format(i) for i in range(train_data_size, tot_data_size)]
+            self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(train_data_size, tot_data_size)]
         elif train_test_gnrl == 'gnrl':
             gnrl_data_size = len(os.listdir(image_paths))
             print("Sorting gnrl image files")
             self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(0,gnrl_data_size)]
-            self.files_tgt = [target_paths+ 'inverse_{}.png'.format(i) for i in range(0,gnrl_data_size)]
+            self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(0,gnrl_data_size)]
         
     def __getitem__(self, index):
         

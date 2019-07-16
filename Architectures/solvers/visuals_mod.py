@@ -21,7 +21,7 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 
     z_dim = NN.z_dim_tot
     if model == 'FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
         z_dim_gauss = NN.z_dim_gauss
-        z_dim_brnl = NN.z_dim_brnl
+        z_dim_bern = NN.z_dim_bern
     else:
         z_dim_gauss = z_dim
         z_dim_brnl = z_dim
@@ -35,10 +35,10 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 
     if model == 'FF_gauss_VAE' or model =='BLT_gauss_VAE':
         z_sample = z_distributions[:, :z_dim_gauss]
     elif model == 'FF_brnl_VAE' or model =='BLT_brnl_VAE':
-        z_sample = z_distributions[:, :z_dim_brnl]
+        z_sample = z_distributions[:, :z_dim_bern]
     elif model == 'FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
-        p = z_distributions[:, :z_dim_brnl]
-        mu = z_distributions[:, z_dim_brnl:z_dim_gauss]
+        p = z_distributions[:, :z_dim_bern]
+        mu = z_distributions[:, z_dim_bern:(z_dim_bern+z_dim_gauss)]
         z_sample = torch.cat((p, mu),1)
    
     x_recon = NN._decode(z_sample)
@@ -54,19 +54,34 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 
         dist_samples = np.random.uniform(low=0, high=1, size=1000)
         dist_samples.sort()
         dist_samples = torch.from_numpy(dist_samples[0::num_slice])
-    #elif model =='hybrid_VAE':
+    elif model =='FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
+        dist_samples_1= np.random.uniform(low=0, high=1, size=1000)
+        dist_samples_2 = np.random.normal(loc=0, scale=1, size=1000)
+        dist_samples_1.sort()
+        dist_samples_2.sort()
+        dist_samples_1 = torch.from_numpy(dist_samples_1[0::num_slice])
+        dist_samples_2 = torch.from_numpy(dist_samples_2[0::num_slice])
         
             
     traverse_input = torch.mul(torch.ones(num_frames*z_dim,1),z_sample)
 
     #print(traverse_input.shape)
 
-    #Populate matrix with individually varying Zs
-    indexs = np.arange(0, num_frames*z_dim, num_frames)
-    for i in indexs:
-        z = int(i/num_frames)
-        traverse_input[i:(i+num_frames),z] = dist_samples
-
+    if model =='FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
+        indexs = np.arange(0, num_frames*z_dim, num_frames)
+        for i in indexs:
+            z = int(i/num_frames)
+            if z <= z_dim_bern:
+                traverse_input[i:(i+num_frames),z] = dist_samples_1
+            else:
+                traverse_input[i:(i+num_frames),z] = dist_samples_2
+    else:
+         #Populate matrix with individually varying Zs
+        indexs = np.arange(0, num_frames*z_dim, num_frames)
+        for i in indexs:
+            z = int(i/num_frames)
+            traverse_input[i:(i+num_frames),z] = dist_samples
+    
     #create all reconstruction images
     reconst = NN._decode(traverse_input)
 

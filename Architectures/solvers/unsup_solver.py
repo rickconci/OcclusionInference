@@ -139,6 +139,7 @@ class Solver_unsup(object):
             self.z_dim_gauss = args.z_dim_gauss
             
         self.n_filter = args.n_filter
+        self.sbd = args.spatial_broadcast_decoder
 
         self.image_size = args.image_size
         self.beta = args.beta
@@ -156,18 +157,18 @@ class Solver_unsup(object):
             raise NotImplementedError
             
         if args.model == 'FF_gauss_VAE':
-            net = FF_gauss_VAE(self.z_dim, self.n_filter, self.nc)
+            net = FF_gauss_VAE(self.z_dim, self.n_filter, self.nc,self.sbd )
         elif args.model == 'FF_brnl_VAE':
-            net = FF_brnl_VAE(self.z_dim, self.n_filter, self.nc)
+            net = FF_brnl_VAE(self.z_dim, self.n_filter, self.nc, self.sbd)
         elif args.model =='FF_hybrid_VAE':
-            net = FF_hybrid_VAE(self.z_dim_bern,self.z_dim_gauss, self.n_filter, self.nc)
+            net = FF_hybrid_VAE(self.z_dim_bern,self.z_dim_gauss, self.n_filter, self.nc, self.sbd)
         
         elif args.model =='BLT_gauss_VAE':
-            net = BLT_gauss_VAE(0, self.z_dim_gauss, self.nc)
+            net = BLT_gauss_VAE(0, self.z_dim_gauss, self.nc, self.sbd)
         elif args.model =='BLT_brnl_VAE':
-            net = BLT_brnl_VAE(self.z_dim_bern, 0, self.nc)
+            net = BLT_brnl_VAE(self.z_dim_bern, 0, self.nc, self.sbd)
         elif args.model =='BLT_hybrid_VAE':
-            net = BLT_hybrid_VAE(self.z_dim_bern, self.z_dim_gauss, self.nc)
+            net = BLT_hybrid_VAE(self.z_dim_bern, self.z_dim_gauss, self.nc, self.sbd)
         else:
             raise NotImplementedError('Model not correct')
         
@@ -238,9 +239,7 @@ class Solver_unsup(object):
             self.flip_idx.sort()
             print(self.flip_idx[0:20])
             print(len(self.flip_idx), " flipped images!")
-       
-        self.SB = args.spatial_broadcaster
-        
+               
     def train(self):
         #self.net(train=True)
         iters_per_epoch = len(self.train_dl)
@@ -367,7 +366,7 @@ class Solver_unsup(object):
                         pbar.write('Saved best checkpoint(iter:{})'.format(self.global_iter))
                     
                     self.test_plots()
-                    self.gather.save_data(self.glob_iter, self.output_dir, 'last' )
+                    self.gather.save_data(self.global_iter, self.output_dir, 'last' )
                     
                 if self.global_iter%500 == 0:
                     self.save_checkpoint(str(self.global_iter))
@@ -482,14 +481,14 @@ class Solver_unsup(object):
                                          format(self.output_dir, self.global_iter))        
         
         print("Constructing Z hist!")
-        construct_z_hist(net_copy, self.train_dl, self.global_iter, self.output_dir,dim='depth')
+        construct_z_hist(net_copy, self.test_dl, self.global_iter, self.output_dir,dim='depth')
 
         
         #select test image to traverse 
         print("Traversing!")
         with torch.no_grad():
             for i in range(3):
-                example_id = self.test_data.__getitem__(i)
+                example_id = self.test_data.__getitem__(i+random.randint(0,20))
                 traverse_z(net_copy, example_id, ID=str(i),output_dir=self.output_dir, 
                            global_iter=self.global_iter, model= self.model, num_frames=100 )
     
