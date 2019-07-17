@@ -7,6 +7,7 @@ from PIL import Image
 import torchvision
 import shutil
 from tqdm import tqdm
+import torch.nn as nn
 
 
 import matplotlib.pyplot as plt
@@ -17,7 +18,7 @@ plt.rcParams['figure.figsize'] = [15, 15]
 
 
 
-def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 100 ):
+def traverse_z(NN, example_id, ID, output_dir, global_iter, model, sbd ,num_frames = 100 ):
     z_dim = NN.z_dim_tot
     if model == 'FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
         z_dim_gauss = NN.z_dim_gauss
@@ -81,7 +82,10 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model ,num_frames = 
         for i in indexs:
             z = int(i/num_frames)
             traverse_input[i:(i+num_frames),z] = dist_samples
-    
+    if sbd:
+        decoder = spatial_broadcast_decoder()
+        traverse_input = decoder(traverse_input)
+        
     #create all reconstruction images
     reconst = NN._decode(traverse_input)
 
@@ -368,3 +372,32 @@ def plotFilters(self, figIdx = None, colorLimit = 'common'):
                 plt.ylabel(self.model.mapnames[ii], fontdict={'fontsize': self.fontsize, 'fontweight': 'bold'})
     plt.show()
     return fig
+
+
+
+   
+class spatial_broadcast_decoder(nn.Module):
+    def __init__(self, im_size=32):
+        super(spatial_broadcast_decoder, self).__init__()
+        self.im_size = im_size
+        x = torch.linspace(-1, 1, im_size)
+        y = torch.linspace(-1, 1, im_size)
+        x_grid, y_grid = torch.meshgrid(x, y)
+        # Add as constant, with extra dims for N and C
+        self.register_buffer('x_grid', x_grid.view((1, 1) + x_grid.shape))
+        self.register_buffer('y_grid', y_grid.view((1, 1) + y_grid.shape))
+    
+    def forward(self,z):
+        batch_size = z.size(0)
+        # View z as 4D tensor to be tiled across new H and W dimensions
+        # Shape: NxDx1x1
+        z = z.view(z.shape + (1, 1))
+        # Tile across to match image size
+        # Shape: NxDx32x32
+        z = z.expand(-1, -1, self.im_size, self.im_size)
+        # Expand grids to batches and concatenate on the channel dimension
+        # Shape: Nx(D+2)x32x32
+        z_bd = torch.cat((self.x_grid.expand(batch_size, -1, -1, -1),
+                        self.y_grid.expand(batch_size, -1, -1, -1), z), dim=1)
+
+        return(z_bd)

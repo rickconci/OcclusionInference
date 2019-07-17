@@ -101,7 +101,8 @@ class BLT_mod_encoder(nn.Module):
         self.W_l_3 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
         
         self.Lin_1 = nn.Linear(32*4*4, 256, bias=True)
-        self.Lin_2 = nn.Linear(256, z_dim_bern+2*z_dim_gauss, bias=True)
+        self.Lin_2 = nn.Linear(256, 256, bias=True)
+        self.Lin_3 = nn.Linear(256, z_dim_bern+2*z_dim_gauss, bias=True)
         
         self.LRN = nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
         
@@ -124,13 +125,15 @@ class BLT_mod_encoder(nn.Module):
                 Z_2 = self.W_b_2(self.LRN(F.relu(Z_1)))
                 Z_3 = self.W_b_3(self.LRN(F.relu(Z_2)))
                 read_z = self.Lin_1(Z_3.view(-1, 32*4*4 ))
-                final_z = self.Lin_2(read_z)
+                read_z_2 = self.Lin_2(F.relu(read_z))
+                final_z = self.Lin_3(read_z_2)
             elif t>=1:
                 Z_1 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1))) + self.W_t_1(self.LRN(F.relu(Z_2))) 
                 Z_2 = self.W_b_2(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) + self.W_t_2(self.LRN(F.relu(Z_3))) 
                 Z_3 = self.W_b_3(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3))) 
                 read_z = self.Lin_1(self.LRN(F.relu(Z_3)).view(-1, 32*4*4 ))
-                final_z = self.Lin_2(F.relu(read_z))
+                read_z_2 = self.Lin_2(F.relu(read_z))
+                final_z = self.Lin_3(F.relu(read_z_2))
                 
         #print(torch.sum(torch.isnan(final_z)))
         #print(final_z.size())
@@ -145,7 +148,8 @@ class BLT_mod_decoder(nn.Module):
         print("using BLT_mod_decoder")
         
         self.Lin_1 = nn.Linear( z_dim_bern + z_dim_gauss, 256, bias=True)
-        self.Lin_2 = nn.Linear(256, 32*4*4, bias=True) 
+        self.Lin_2 = nn.Linear(256, 256, bias=True) 
+        self.Lin_3 = nn.Linear(256, 32*4*4, bias=True) 
         
         self.W_b_1 = nn.ConvTranspose2d(32, 32, kernel_size=3, stride=2, padding=1, output_padding=1 ,bias=True ) # bs 32 8 8
         self.W_l_1 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
@@ -174,12 +178,12 @@ class BLT_mod_decoder(nn.Module):
     def forward(self, z):
         for t in range(4):
             if t <1:
-                Z_1 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4)
+                Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
                 Z_2 = self.W_b_1(self.LRN(F.relu(Z_1)))
                 Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
                 final_img = self.W_b_3(self.LRN(F.relu(Z_3)))
             if t>=1:
-                Z_1 = self.Lin_2(self.Lin_1(z)).view(-1,32,4,4) + self.W_l_1(self.LRN(F.relu(Z_1))) + self.W_t_1(self.LRN(F.relu(Z_2)))
+                Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4) + self.W_l_1(self.LRN(F.relu(Z_1))) + self.W_t_1(self.LRN(F.relu(Z_2)))
                 Z_2 = self.W_b_1(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) +  self.W_t_2(self.LRN(F.relu(Z_3)))
                 Z_3 = self.W_b_2(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3)))
                 final_img = self.W_b_3(self.LRN(F.relu(Z_3)))
@@ -271,7 +275,7 @@ class BLT_gauss_VAE(nn.Module):
         elif train ==False:
             distributions = self._encode(x)
             mu = distributions[:, :self.z_dim_tot]
-            if self.sp_b:
+            if self.sbd:
                  mu = spatial_broadcast_decoder(mu)
             x_recon = self._decode(mu)
             x_recon = x_recon.view(x.size())
@@ -333,7 +337,7 @@ class BLT_brnl_VAE(nn.Module):
     
     
 class BLT_hybrid_VAE(nn.Module):
-    def __init__(self, z_dim_bern, z_dim_gauss, nc):
+    def __init__(self, z_dim_bern, z_dim_gauss, nc, sbd):
         super(BLT_hybrid_VAE, self).__init__()
         self.z_dim_gauss = z_dim_gauss
         self.z_dim_bern = z_dim_bern

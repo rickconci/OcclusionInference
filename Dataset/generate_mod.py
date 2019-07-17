@@ -137,6 +137,7 @@ def sample_clutter(**kwargs):
     if offset_sample_type == 'random_unoccluded':
         offset_mean = random_unoccluding_offset(rad=0.225)
 
+  
     for i in range(n_letters):
         char_opt['identity'] = characters[i]
         char_opt['font'] = random.choice(font_set)
@@ -166,12 +167,30 @@ def sample_clutter(**kwargs):
         # Sample the offset
         if tuple(offset_cov) == ((0, 0), (0, 0)):
             char_opt['offset'] = offset_mean[i]
+
         elif offset_sample_type == 'uniform':
             x_offset = offset_mean[0] + np.random.uniform(offset_cov[0][0],
                                                        offset_cov[0][1])
             y_offset = offset_mean[1] + np.random.uniform(offset_cov[1][0],
                                                        offset_cov[1][1])
-            char_opt['offset'] = [x_offset, y_offset]
+            if i <1:
+                x_pos_1 = x_offset
+                y_pos_1 = y_offset
+           
+                char_opt['offset'] = [x_offset, y_offset]
+
+            elif i>=1:
+                distance = np.sqrt((x_pos_1 - x_offset)**2 + (y_pos_1 - y_offset)**2)
+                while distance <0.10 or distance >0.35:
+                    #print("too close!")
+                    x_offset = offset_mean[0] + np.random.uniform(offset_cov[0][0],
+                                                           offset_cov[0][1])
+                    y_offset = offset_mean[1] + np.random.uniform(offset_cov[1][0],
+                                                               offset_cov[1][1])
+                    distance = np.sqrt((x_pos_1 - x_offset)**2 + (y_pos_1 - y_offset)**2)
+                char_opt['offset'] = [x_offset, y_offset]
+                
+                
         elif offset_sample_type == 'gaussian':
             char_opt['offset'] = np.random.multivariate_normal(offset_mean,
                                                                offset_cov)

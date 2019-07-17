@@ -72,7 +72,7 @@ class Solver(object):
             self.offset_sample_type = 'gaussian'
         elif args.offset == 'random_occluded':
             self.offset_mean =  (0, 0)
-            self.offset_cov = ((-0.10, 0.10), (-0.01, 0.20))
+            self.offset_cov = ((-0.25, 0.25), (-0.15, 0.15))
             self.offset_sample_type = 'uniform'
         else:
             raise ValueError('unrecognised offset option')

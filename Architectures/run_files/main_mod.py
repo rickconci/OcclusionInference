@@ -41,14 +41,15 @@ def main(args):
             net.gnrl_loss()
             net.test_plots()
         plotLearningCurves(net)
+        net.linear_readout_sup()
         
     elif not args.train:
         print("Testing")
-        net.test_loss()
+        #net.test_loss()
         if args.testing_method == 'unsupervised':
             #net.gnrl_loss()
             net.test_plots()
-        plotLearningCurves(net)
+        #plotLearningCurves(net)
 
 
 if __name__ == "__main__":
@@ -80,7 +81,7 @@ if __name__ == "__main__":
     parser.add_argument('--dset_dir', default='/train/', type=str, help='dataset directory')
     parser.add_argument('--dataset', default='digits_gray', type=str, help='dataset name')
     parser.add_argument('--testing_method', default='unsupervised', type=str, help='supervised vs unsupervised')
-    parser.add_argument('--encoder_target_type', default='joint', type=str, help='types of supervised encoding')
+    parser.add_argument('--encoder_target_type', default='depth_black_white', type=str, help='types of supervised encoding')
     parser.add_argument('--image_size', default=32, type=int, help='image size. now only (64,64) is supported')
     parser.add_argument('--num_workers', default=8, type=int, help='dataloader num_workers')
     parser.add_argument('--flip', default=False, type=str2bool, help='enable flipping of Zs during image inverse')

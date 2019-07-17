@@ -28,9 +28,11 @@ import sys
 sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
 #sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 
-from data_loaders.dataset_unsup import return_data_unsupervised 
+from data_loaders.dataset_unsup import return_data_unsupervised
+#from data_loaders.dataset_sup import return_data_sup_encoder
 from models.BLT_models import BLT_gauss_VAE, BLT_brnl_VAE, BLT_hybrid_VAE
 from models.FF_VAE_models import FF_gauss_VAE, FF_brnl_VAE, FF_hybrid_VAE
+from models.Lin_model import Lin_model 
 
 from solvers.visuals_mod import traverse_z,construct_z_hist,  plotsave_tests
 
@@ -159,9 +161,9 @@ class Solver_unsup(object):
         if args.model == 'FF_gauss_VAE':
             net = FF_gauss_VAE(self.z_dim, self.n_filter, self.nc,self.sbd )
         elif args.model == 'FF_brnl_VAE':
-            net = FF_brnl_VAE(self.z_dim, self.n_filter, self.nc, self.sbd)
+            net = FF_brnl_VAE(self.z_dim, self.n_filter, self.nc)
         elif args.model =='FF_hybrid_VAE':
-            net = FF_hybrid_VAE(self.z_dim_bern,self.z_dim_gauss, self.n_filter, self.nc, self.sbd)
+            net = FF_hybrid_VAE(self.z_dim_bern,self.z_dim_gauss, self.n_filter, self.nc)
         
         elif args.model =='BLT_gauss_VAE':
             net = BLT_gauss_VAE(0, self.z_dim_gauss, self.nc, self.sbd)
@@ -230,7 +232,8 @@ class Solver_unsup(object):
         self.batch_size = args.batch_size
         
         self.train_dl, self.test_dl, self.gnrl_dl, self.test_data, self.gnrl_data = return_data_unsupervised(args)
-        
+        #self.sup_train_dl, self.sup_test_dl = return_data_sup_encoder(args)
+        self.l2_loss = args.l2_loss
        
         
         if self.flip==True:
@@ -370,7 +373,7 @@ class Solver_unsup(object):
                     
                 if self.global_iter%500 == 0:
                     self.save_checkpoint(str(self.global_iter))
-                    self.gather.save_data(self.glob_iter, self.output_dir, None )
+                    self.gather.save_data(self.global_iter, self.output_dir, None )
 
                 if self.global_iter >= max_iter:
                     out = True
@@ -546,6 +549,72 @@ class Solver_unsup(object):
         if os.path.isfile(file_path_2):
             self.gather.load_data(file_path_2)
        
-
-            
+    def linear_readout_sup(self, max_epoch):
         
+        if self.encoder_target_type == 'joint':
+            z_out = 10
+        elif self.encoder_target_type == 'black_white':
+            z_out = 20
+        elif self.encoder_target_type == 'depth_black_white':
+            z_out = 22
+        
+        lin_net = Lin_model(self.z_dim, z_out)
+        optim_2 = optim.Adam(lin_net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        
+        if torch.cuda.device_count()>1:
+            print("Let's use", torch.cuda.device_count(), "GPUs!")
+            lin_net = nn.DataParallel(lin_net)
+        lin_net = lin_net.to(self.device) 
+        
+        iters_per_epoch = len(self.sup_train_dl)
+        print(iters_per_epoch)
+        max_iter = max_epoch*iters_per_epoch
+        batch_size = self.sup_train_dl.batch_size
+        
+        count = 0
+        out = False
+        pbar = tqdm(total=max_iter)
+        self.global_iter = 0
+        pbar.update(self.global_iter)
+        
+        while not out:
+            for sample in self.sup_train_dl:
+                self.global_iter += 1
+                pbar.update(1)
+    
+                x = sample['x'].to(self.device)
+                y = sample['y'].to(self.device)
+                
+                with torch.no_grad():
+                    final_out = self.net._encode(x)
+                
+                z_out = lin_net(final_out)
+                loss = supervised_encoder_loss(z_out, y, self.encoder_target_type)
+                
+                l2 = 0
+                for p in self.net.parameters():
+                    l2 = l2 + p.pow(2).sum() #*0.5
+                loss = loss + self.l2_loss * l2
+                
+                optim_2.zero_grad()
+                loss.backward()
+                optim_2.step()
+        
+                count +=1 
+                if self.global_iter >= max_iter:
+                    out = True
+                    break
+                    
+            pbar.write("[Training Finished]")
+            pbar.close()
+
+    def get_accuracy(self, outputs, targets):
+        assert outputs.size() == targets.size()
+        assert outputs.size(0) > 0
+        x = torch.topk(outputs,2,dim=1 )
+        y = torch.topk(targets,2,dim=1 )
+        outputs = x[1].cpu().numpy()
+        targets  = y[1].cpu().numpy()
+
+        accuracy = np.sum(outputs == targets)/outputs.size *100
+        return(accuracy)

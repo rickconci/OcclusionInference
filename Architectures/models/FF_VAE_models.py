@@ -43,13 +43,13 @@ class FF_gauss_VAE(nn.Module):
         self.encoder = nn.Sequential(
             nn.Conv2d(nc, self.n_filter, 4, 2, 1),          # B,  32, 16, 16
             nn.ReLU(True),
-            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  8,  8
             nn.ReLU(True),
-            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  4,  4
             nn.ReLU(True),
-            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             View((-1, self.n_filter*4*4)),                  # B, 512
             nn.Linear(self.n_filter*4*4, 256),              # B, 256
             nn.ReLU(True),
@@ -73,12 +73,12 @@ class FF_gauss_VAE(nn.Module):
                 View((-1, self.n_filter, 4, 4)),                # B,  32,  4,  4
                 nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32,  8,  8
                 nn.ReLU(True),
-                nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
+                nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
                 nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32, 16, 16
                 nn.ReLU(True),
-                nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
+                nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
                 nn.ConvTranspose2d(self.n_filter, nc, 4, 2, 1), # B,  32, 32, 32
-                nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
+                nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             )
         self.weight_init() 
         
@@ -123,16 +123,19 @@ class FF_brnl_VAE(nn.Module):
         super(FF_brnl_VAE, self).__init__()
         self.nc = nc
         self.z_dim_tot = z_dim
-        self.z_dim_brnl = z_dim
+        self.z_dim_bern = z_dim
         self.n_filter = n_filter
         #assume initial size is 32 x 32 
         self.encoder = nn.Sequential(
             nn.Conv2d(nc, self.n_filter, 4, 2, 1),          # B,  32, 16, 16
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  8,  8
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  4,  4
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             View((-1, self.n_filter*4*4)),                  # B, 512
             nn.Linear(self.n_filter*4*4, 256),              # B, 256
             nn.ReLU(True),
@@ -151,9 +154,12 @@ class FF_brnl_VAE(nn.Module):
             View((-1, self.n_filter, 4, 4)),                # B,  32,  4,  4
             nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32,  8,  8
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32, 16, 16
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.ConvTranspose2d(self.n_filter, nc, 4, 2, 1), # B,  32, 32, 32
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
         )
         self.weight_init() 
         
@@ -194,20 +200,23 @@ class FF_brnl_VAE(nn.Module):
 
 
 class FF_hybrid_VAE(nn.Module):
-    def __init__(self, z_dim_bern=10, z_dim_gauss=10,n_filter=32, nc=1):
+    def __init__(self, z_dim_bern, z_dim_gauss,n_filter, nc):
         super(FF_hybrid_VAE, self).__init__()
         self.nc = nc
         self.z_dim_gauss = z_dim_gauss
-        self.z_dim_brnl = z_dim_brnl
+        self.z_dim_bern = z_dim_bern
         self.z_dim_tot = z_dim_gauss + z_dim_bern
         #assume initial size is 32 x 32 
         self.encoder = nn.Sequential(
             nn.Conv2d(nc, n_filter, 4, 2, 1),          # B,  32, 16, 16
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.Conv2d(n_filter, n_filter, 4, 2, 1),          # B,  32,  8,  8
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.Conv2d(n_filter, n_filter, 4, 2, 1),          # B,  32,  4,  4
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             View((-1, n_filter*4*4)),                  # B, 512
             nn.Linear(n_filter*4*4, 256),              # B, 256
             nn.ReLU(True),
@@ -226,9 +235,12 @@ class FF_hybrid_VAE(nn.Module):
             View((-1, n_filter, 4, 4)),                # B,  32,  4,  4
             nn.ConvTranspose2d(n_filter, n_filter, 4, 2, 1), # B,  32,  8,  8
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.ConvTranspose2d(n_filter, n_filter, 4, 2, 1), # B,  32, 16, 16
             nn.ReLU(True),
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
             nn.ConvTranspose2d(n_filter, nc, 4, 2, 1), # B,  32, 32, 32
+            nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
         )
         self.weight_init() 
         
