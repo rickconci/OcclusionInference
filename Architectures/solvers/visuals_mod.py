@@ -8,7 +8,11 @@ import torchvision
 import shutil
 from tqdm import tqdm
 import torch.nn as nn
+import sys
+sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
+#sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 
+from models.BLT_models import SB_decoder, spatial_broadcast_decoder
 
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf
@@ -18,14 +22,8 @@ plt.rcParams['figure.figsize'] = [15, 15]
 
 
 
-def traverse_z(NN, example_id, ID, output_dir, global_iter, model, sbd ,num_frames = 100 ):
+def traverse_z(NN, example_id, ID, output_dir, global_iter, sbd ,num_frames = 100 ):
     z_dim = NN.z_dim_tot
-    if model == 'FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
-        z_dim_gauss = NN.z_dim_gauss
-        z_dim_bern = NN.z_dim_bern
-    else:
-        z_dim_gauss = z_dim
-        z_dim_brnl = z_dim
     
     x_test_sample = example_id['x']
     y_test_sample = example_id['y']
@@ -33,29 +31,27 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model, sbd ,num_fram
     
     #encode a sample image
     z_distributions = NN._encode(x_test_sample)
-    if model == 'FF_gauss_VAE' or model =='BLT_gauss_VAE':
-        z_sample = z_distributions[:, :z_dim_gauss]
-    elif model == 'FF_brnl_VAE' or model =='BLT_brnl_VAE':
-        z_sample = z_distributions[:, :z_dim_bern]
-    elif model == 'FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
-        p = z_distributions[:, :z_dim_bern]
-        mu = z_distributions[:, z_dim_bern:(z_dim_bern+z_dim_gauss)]
-        z_sample = torch.cat((p, mu),1)
-   
-    x_recon = NN._decode(z_sample)
+    if NN.z_dim_bern == 0:
+        z_sample = z_distributions[:, :NN.z_dim_gauss]
+    elif NN.z_dim_gauss == 0:
+        z_sample = z_distributions[:, :NN.z_dim_bern]
+    elif NN.z_dim_bern !=0 and NN.z_dim_gauss != 0:
+        p = z_distributions[:, :NN.z_dim_bern]
+        mu = z_distributions[:, NN.z_dim_bern:(NN.z_dim_bern+NN.z_dim_gauss)]
+        z_sample = torch.cat((p, mu),1) 
    
     num_slice = int(1000/num_frames)
 
-    if model == 'FF_gauss_VAE' or model =='BLT_gauss_VAE':
+    if NN.z_dim_bern == 0:
         #create sorted normal samples & transverse_input matrix made from z encodings of sample image
         dist_samples = np.random.normal(loc=0, scale=1, size=1000)
         dist_samples.sort()
         dist_samples = torch.from_numpy(dist_samples[0::num_slice])
-    elif model == 'FF_brnl_VAE' or model =='BLT_brnl_VAE':
+    elif NN.z_dim_gauss == 0:
         dist_samples = np.random.uniform(low=0, high=1, size=1000)
         dist_samples.sort()
         dist_samples = torch.from_numpy(dist_samples[0::num_slice])
-    elif model =='FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
+    elif NN.z_dim_bern !=0 and NN.z_dim_gauss != 0:
         dist_samples_1= np.random.uniform(low=0, high=1, size=1000)
         dist_samples_2 = np.random.normal(loc=0, scale=1, size=1000)
         dist_samples_1.sort()
@@ -65,14 +61,15 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model, sbd ,num_fram
         
             
     traverse_input = torch.mul(torch.ones(num_frames*z_dim,1),z_sample)
-
+    
+     
     #print(traverse_input.shape)
 
-    if model =='FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
+    if NN.z_dim_bern !=0 and NN.z_dim_gauss != 0:
         indexs = np.arange(0, num_frames*z_dim, num_frames)
         for i in indexs:
             z = int(i/num_frames)
-            if z <= z_dim_bern:
+            if z <= NN.z_dim_bern:
                 traverse_input[i:(i+num_frames),z] = dist_samples_1
             else:
                 traverse_input[i:(i+num_frames),z] = dist_samples_2
@@ -82,12 +79,20 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, model, sbd ,num_fram
         for i in indexs:
             z = int(i/num_frames)
             traverse_input[i:(i+num_frames),z] = dist_samples
+   
     if sbd:
-        decoder = spatial_broadcast_decoder()
-        traverse_input = decoder(traverse_input)
-        
-    #create all reconstruction images
-    reconst = NN._decode(traverse_input)
+        sbd_decoder = SB_decoder(NN.z_dim_bern, NN.z_dim_gauss, NN.n_filter, NN.nc)
+        sbd_model = spatial_broadcast_decoder()
+        z_sample = sbd_model(z_sample)
+        x_recon = sbd_decoder(z_sample)
+        traverse_input = sbd_model(traverse_input)
+        reconst = sbd_decoder(traverse_input)
+        print(reconst.shape)
+    else:
+        #create all reconstruction images
+        x_recon = NN._decode(z_sample)
+        reconst = NN._decode(traverse_input)
+        print(reconst.shape)
 
     #Create GIFs
     indexs = np.arange(0, num_frames*z_dim, num_frames)
@@ -206,6 +211,42 @@ def visualise_tsne():
     #test loss vs occlusion over time 
     #need to compare loss vs others to make point
     unseen_loader
+    
+    
+    
+def plot_decoder_img(NN, test_data, pdf_path, global_iter, sbd, type, n=20 ):
+    if type =='Test':
+        pdf_path = "{}/testing_recon{}.pdf".format(pdf_path, global_iter)
+    elif type =='Gnrl':
+        pdf_path = "{}/gnrl_recon{}.pdf".format(pdf_path, global_iter)
+        
+    pdf = matplotlib.backends.backend_pdf.PdfPages(pdf_path)
+    for i in range(n):
+        sample = test_data.__getitem__(i)
+        x = sample['x']
+        y = sample['y']
+        if sbd:
+            sbd_model = spatial_broadcast_decoder()
+            x = torch.unsqueeze(x, 0)
+            x = sbd_model(x)
+            
+        x_recon = NN._decode(x)
+        x = x.numpy()
+        y = y.numpy()
+        x_recon = F.sigmoid(x_recon).numpy()
+            
+        #plt.gray()    if want grey image instead of coloured 
+        f, ( a1, a2) = plt.subplots(1, 2, gridspec_kw={'width_ratios': [1,1]})
+        #https://scipy-cookbook.readthedocs.io/items/Matplotlib_Show_colormaps.html
+        #a0.imshow(x[0,0,:,:]) #cmap='...' 
+        a1.imshow(y[0,:,:])
+        a2.imshow(x_recon[0,0,:,:])
+        f.tight_layout()
+        f.suptitle(np.around(x,2))
+        pdf.savefig(f, dpi=300)
+        plt.close()
+
+    pdf.close()
     
             
 def plotsave_tests(NN, test_data, pdf_path, global_iter, type, n=20, ):
@@ -373,31 +414,3 @@ def plotFilters(self, figIdx = None, colorLimit = 'common'):
     plt.show()
     return fig
 
-
-
-   
-class spatial_broadcast_decoder(nn.Module):
-    def __init__(self, im_size=32):
-        super(spatial_broadcast_decoder, self).__init__()
-        self.im_size = im_size
-        x = torch.linspace(-1, 1, im_size)
-        y = torch.linspace(-1, 1, im_size)
-        x_grid, y_grid = torch.meshgrid(x, y)
-        # Add as constant, with extra dims for N and C
-        self.register_buffer('x_grid', x_grid.view((1, 1) + x_grid.shape))
-        self.register_buffer('y_grid', y_grid.view((1, 1) + y_grid.shape))
-    
-    def forward(self,z):
-        batch_size = z.size(0)
-        # View z as 4D tensor to be tiled across new H and W dimensions
-        # Shape: NxDx1x1
-        z = z.view(z.shape + (1, 1))
-        # Tile across to match image size
-        # Shape: NxDx32x32
-        z = z.expand(-1, -1, self.im_size, self.im_size)
-        # Expand grids to batches and concatenate on the channel dimension
-        # Shape: Nx(D+2)x32x32
-        z_bd = torch.cat((self.x_grid.expand(batch_size, -1, -1, -1),
-                        self.y_grid.expand(batch_size, -1, -1, -1), z), dim=1)
-
-        return(z_bd)

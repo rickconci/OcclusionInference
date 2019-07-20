@@ -27,7 +27,9 @@ from torchvision.utils import make_grid, save_image
 import sys
 sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
 from data_loaders.dataset_sup import return_data_sup_encoder, return_data_sup_decoder
-from models.BLT_models import BLT_mod, BLT_orig, FF
+from models.BLT_models import multi_VAE, SB_decoder, spatial_broadcast_decoder
+from solvers.visuals_mod import plot_decoder_img
+
 
 def supervised_encoder_loss(output, target, encoder_target_type):
     batch_size = output.size(0)
@@ -89,13 +91,9 @@ class DataGather(object):
 
     def get_empty_data_dict(self):
         return dict(iter=[],
-                    recon_loss=[],
-                    total_kld=[],
-                    dim_wise_kld=[],
-                    mean_kld=[],
-                    mu=[],
-                    var=[],
-                    images=[],)
+                    train_recon_loss=[],
+                    test_recon_loss =[],
+                   )
 
     def insert(self, **kwargs):
         for key in kwargs:
@@ -121,32 +119,26 @@ class Solver_sup(object):
     def __init__(self, args):
         self.use_cuda = args.cuda and torch.cuda.is_available()
         
-        self.model = args.model
-        self.max_epoch = args.max_epoch
-        self.global_iter = 0
-        
-        
-        self.z_dim = args.z_dim
-        self.bs = args.batch_size
-        self.flip= args.flip
         self.testing_method = args.testing_method
-        self.encoder_target_type = args.encoder_target_type
+        self.encoder = args.encoder
+        self.decoder = args.decoder
+        self.n_filter = args.n_filter
+        self.n_rep = args.n_rep
+        self.sbd = args.sbd
         
+       
+        
+        self.encoder_target_type = args.encoder_target_type
+                
         if args.encoder_target_type == 'joint':
             self.z_dim = 10
         elif args.encoder_target_type == 'black_white':
             self.z_dim = 20
         elif args.encoder_target_type == 'depth_black_white':
             self.z_dim = 21
+        elif args.encoder_target_type == 'depth_black_white_xy_xy':
+            self.z_dim = 25
             
-            
-        self.n_filter = args.n_filter
-        self.image_size = args.image_size
-        self.model = args.model
-        self.lr = args.lr
-        self.beta1 = args.beta1
-        self.beta2 = args.beta2
-        self.l2_loss= args.l2_loss
         
         if args.dataset.lower() == 'digits_gray':
             self.nc = 1
@@ -154,40 +146,56 @@ class Solver_sup(object):
             self.nc = 3
         else:
             raise NotImplementedError
+        
+        net = multi_VAE(self.encoder,self.decoder,self.z_dim, 0 ,self.n_filter,self.nc,self.n_rep,self.sbd)
+        
+        
+        if self.sbd == True:
+            self.decoder = SB_decoder(self.z_dim, 0, self.n_filter, self.nc)
+            self.sbd_model = spatial_broadcast_decoder()
             
-        if args.model == 'FF':
-            print("Using Feed forward model!")
-            net = FF(z_dim=self.z_dim, nc=self.nc, n_filter=self.n_filter)
-        elif args.model =='BLT_orig':
-            print("Using original BLT model!")
-            net = BLT_orig(z_dim=self.z_dim, nc=self.nc)
-        elif args.model =='BLT_mod':
-            print("Using modified BLT model!")
-            net = BLT_mod(z_dim=self.z_dim, nc=self.nc)
-        else:
-            raise NotImplementedError('Model not correct')
-        
         print("CUDA availability: " + str(torch.cuda.is_available()))
-        
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        
         if torch.cuda.device_count()>1:
             print("Let's use", torch.cuda.device_count(), "GPUs!")
             net = nn.DataParallel(net)
             
-        # copy the model to each device
         self.net = net.to(self.device) 
-        self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9) 
-       
-        
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
-        
         #print parameters in model
         tot_size = 0
         for parameter in self.net.parameters():
             tot_size += parameter.numel()
         print(tot_size ,"parameters in the network!")
-             
+        
+        self.lr = args.lr
+        self.l2_loss = args.l2_loss
+        self.beta1 = args.beta1
+        self.beta2 = args.beta2        
+        if args.optim_type =='Adam':
+            self.optim = optim.Adam(self.net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        elif args.optim_type =='SGD':
+            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
+        
+        if self.testing_method == 'supervised_encoder':
+             self.train_dl, self.test_dl  = return_data_sup_encoder(args)
+        elif self.testing_method == 'supervised_decoder':
+            self.train_dl, self.test_dl, self.gnrl_dl , self.test_data =  return_data_sup_decoder(args)
+        else:
+            raise NotImplementedError    
+        
+        
+            
+        self.max_epoch = args.max_epoch
+        self.global_iter = 0
+        self.max_epoch = args.max_epoch
+        self.global_iter = 0
+        self.gather_step = args.gather_step
+        self.display_step = args.display_step
+        self.save_step = args.save_step
+          
+        self.image_size = args.image_size
+
         self.viz_name = args.viz_name
         self.viz_port = args.viz_port
         self.viz_on = args.viz_on
@@ -195,8 +203,8 @@ class Solver_sup(object):
         self.win_kld = None
         self.win_mu = None
         self.win_var = None
-        if self.viz_on:
-            self.viz = visdom.Visdom(port=self.viz_port)
+        #if self.viz_on:
+        #    self.viz = visdom.Visdom(port=self.viz_port)
             
         self.ckpt_dir = os.path.join(args.ckpt_dir, args.viz_name)
         if not os.path.exists(self.ckpt_dir):
@@ -219,13 +227,7 @@ class Solver_sup(object):
         self.batch_size = args.batch_size
         
         
-        if self.testing_method == 'supervised_encoder':
-             self.train_dl, self.test_dl  = return_data_sup_encoder(args)
-        elif self.testing_method == 'supervised_decoder':
-            self.train_dl, self_test_dl, self.gnrl_dl = return_data_sup_decoder(args)
-        #elif self.testing_method =='semisupervised':
-        else:
-            raise NotImplementedError    
+       
         
     def train(self):
         #self.net(train=True)
@@ -248,14 +250,17 @@ class Solver_sup(object):
                 y = sample['y'].to(self.device)
                 
                 #print(x.shape)
+                #print(y.shape)
                 #for i in range(x.size(0)):
-                #    torchvision.utils.save_image( x[i,0,:,:] , '{}/x_{}_{}.png'.format(self.output_dir, self.global_iter, i)) 
-                #    print(y[i,:])
+                #    print(x[i,:])
+                #    torchvision.utils.save_image( y[i,0,:,:] , '{}/x_{}_{}.png'.format(self.output_dir, self.global_iter, i)) 
+                    #print(y[i,:])
                 
                 if self.testing_method =='supervised_encoder':
                     loss, final_out = self.run_model(self.testing_method, x, y, self.l2_loss)
                     train_accuracy = self.get_accuracy(final_out, y)
                 elif self.testing_method == 'supervised_decoder':
+                    x = x.type(torch.FloatTensor)
                     loss, recon = self.run_model(self.testing_method, x, y, self.l2_loss)
                     
                 self.adjust_learning_rate(self.optim, (count/iters_per_epoch))
@@ -266,10 +271,16 @@ class Solver_sup(object):
                 count +=1 
             
             
-                if self.viz_on and self.global_iter%self.gather_step == 0:
+                if self.global_iter%self.gather_step == 0:
                     self.test_loss()
                     self.gather.insert(iter=self.global_iter, train_loss=loss.data, 
                                        test_loss = self.testLoss, test_accuracy = self.accuracy)
+                    if self.testing_method =='supervised_encoder': 
+                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                            myfile.write('\n[{}] train_loss:{:.3f}, train_accuracy:{:.3f}, test_loss:{:.3f}, test_accuracy:{:.3f}'.format(self.global_iter, torch.mean(loss), train_accuracy, self.testLoss, self.test_accuracy))
+                    elif self.testing_method =='supervised_decoder':
+                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                            myfile.write('\n[{}] train_recon_loss:{:.3f}, test_recon_loss:{:.3f}'.format(self.global_iter, torch.mean(loss), self.testLoss))
                 
                 if self.global_iter%self.display_step == 0:
                     if self.testing_method =='supervised_encoder': 
@@ -281,10 +292,9 @@ class Solver_sup(object):
                     self.save_checkpoint('last')
                     pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
                     self.test_loss()
-                    with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                        myfile.write('\n[{}] train_loss:{:.3f}, train_accuracy:{:.3f}, test_loss:{:.3f}, test_accuracy:{:.3f}'.format(
-                            self.global_iter, torch.mean(loss), train_accuracy, self.testLoss, self.test_accuracy))
-                  
+                    if self.testing_method == 'supervised_decoder':
+                        self.test_images()
+                    
                 if self.global_iter%500 == 0:
                     self.save_checkpoint(str(self.global_iter))
 
@@ -312,6 +322,8 @@ class Solver_sup(object):
             loss = loss + l2_loss * l2
             return([loss, final_out])
         elif self.testing_method =='supervised_decoder':
+            if self.sbd:
+                x = self.sbd_model(x)
             recon = self.net._decode(x)
             loss = supervised_decoder_loss(y, recon)
             l2 = 0
@@ -330,10 +342,14 @@ class Solver_sup(object):
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
                 
-                testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                 if self.testing_method =='supervised_encoder':
+                    testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     final_out =testLoss_list[1]
                     test_accuracy += self.get_accuracy(final_out,y)
+                elif self.testing_method =='supervised_decoder':
+                    x = x.type(torch.FloatTensor)
+                    testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
+                    test_accuracy = 0
                 testLoss += testLoss_list[0]
                 cnt += 1
 
@@ -363,16 +379,29 @@ class Solver_sup(object):
             for sample in self.gnrl_data_loader:
                 img = sample['x'].to(self.device)
                 trgt = sample['y'].to(self.device)
-                gnrlLoss= self.run_model(self.model, img, trgt)
-                gnrlLoss = gnrlLoss[0]
+                if self.testing_method =='supervised_encoder':
+                    grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
+                    final_out =grnlLoss_list[1]
+                    gnrl_accuracy += self.get_accuracy(final_out,y)
+                elif self.testing_method =='supervised_decoder':
+                    x = x.type(torch.FloatTensor)
+                    grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
+                    grnl_accuracy = 0
+                gnrlLoss += grnlLoss_list[0]
                 cnt += 1
-                #print(cnt)
         self.gnrlLoss = gnrlLoss.div(cnt)
         self.gnrlLoss = self.gnrlLoss.numpy()[0]
         print('[{}] gnrl_Loss:{:.3f}'.format(self.global_iter, self.gnrlLoss))
         
+    def test_images(self):
+        net_copy = deepcopy(self.net)
+        net_copy.to('cpu')
         
-
+        print('Reconstructing Test Images!')
+        with torch.no_grad():
+            plot_decoder_img(net_copy, self.test_data, self.output_dir, self.global_iter, self.sbd, type="Test", n=20 )
+        
+        
     
     def save_checkpoint(self, filename, silent=True):
         if torch.cuda.device_count()>1:

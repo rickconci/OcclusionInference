@@ -52,6 +52,8 @@ class MyDataset_unsup(Dataset):
         elif train_test_gnrl == 'test':
             print("Sorting test image files")
             tot_data_size = train_data_size + test_data_size
+            print(train_data_size)
+            print(tot_data_size)
             self.files_img = [image_paths+ 'orig_{}.png'.format(i) for i in range(train_data_size, tot_data_size)] 
             self.files_tgt = [target_paths+ 'inverse_{}.png'.format(i) for i in range(train_data_size, tot_data_size)]
         elif train_test_gnrl == 'gnrl':

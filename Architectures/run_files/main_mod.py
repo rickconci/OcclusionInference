@@ -40,8 +40,9 @@ def main(args):
         if args.testing_method == 'unsupervised':
             net.gnrl_loss()
             net.test_plots()
+        print("plotting learning curves!")
         plotLearningCurves(net)
-        net.linear_readout_sup()
+        #net.linear_readout_sup()
         
     elif not args.train:
         print("Testing")
@@ -49,7 +50,8 @@ def main(args):
         if args.testing_method == 'unsupervised':
             #net.gnrl_loss()
             net.test_plots()
-        #plotLearningCurves(net)
+        print("plotting learning curves!")
+        plotLearningCurves(net)
 
 
 if __name__ == "__main__":
@@ -58,25 +60,28 @@ if __name__ == "__main__":
     parser.add_argument('--train', default=True, type=str2bool, help='train or test')
     parser.add_argument('--seed', default=2019, type=int, help='random seed')
     parser.add_argument('--cuda', default=True, type=str2bool, help='enable cuda')
-    parser.add_argument('--max_epoch', default=60, type=float, help='maximum training epoch')
-    parser.add_argument('--batch_size', default=128, type=int, help='batch size')
-    parser.add_argument('--optim_type', default='Adam', type=str, help='type of optimiser')
-    parser.add_argument('--spatial_broadcast_decoder', default=False, type=str2bool, help='use spatial broacast decoder')
-
     
-    parser.add_argument('--z_dim', default=20, type=int, help='dimension of the representation z')
-    parser.add_argument('--z_dim_bern', default=None, type=int, help='dimension of the representation z')
-    parser.add_argument('--z_dim_gauss', default=None, type=int, help='dimension of the representation z')
+    parser.add_argument('--encoder', default='B', type=str, help='B, BL, BT, BLT')
+    parser.add_argument('--decoder', default='B', type=str, help='B, BL, BT, BLT')
+    parser.add_argument('--sbd', default=False, type=str2bool, help='use spatial broacast decoder')
+    parser.add_argument('--n_rep', default=4, type=int, help='iterations of recurrent processing ')
 
+    parser.add_argument('--z_dim_bern', default= 0, type=int, help='dimension of the representation z')
+    parser.add_argument('--z_dim_gauss', default= 20, type=int, help='dimension of the representation z')
     parser.add_argument('--n_filter', default=32, type=int, help='number of filters in convolutional layers')
-
-    parser.add_argument('--beta', default=1, type=float, help='beta parameter for KL-term in original beta-VAE')
-    parser.add_argument('--gamma', default=1, type=float, help='gamma parameter for KL-term in bernoulli VAE')
-    parser.add_argument('--model', default='FF_hybrid_VAE', type=str, help='FF or BLT gauss brnl hybrid ')
+        
+    parser.add_argument('--optim_type', default='Adam', type=str, help='type of optimiser')
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
+    parser.add_argument('--l2_loss', default=0.0005, type=float, help='L2 loss coefficient')
     parser.add_argument('--beta1', default=0.9, type=float, help='Adam optimizer beta1')
     parser.add_argument('--beta2', default=0.999, type=float, help='Adam optimizer beta2')
-    parser.add_argument('--l2_loss', default=0.0005, type=float, help='L2 loss coefficient')
+    
+    parser.add_argument('--max_epoch', default=60, type=float, help='maximum training epoch')
+    parser.add_argument('--batch_size', default=128, type=int, help='batch size')
+    parser.add_argument('--beta', default=1, type=float, help='beta parameter for KL-term in original beta-VAE')
+    parser.add_argument('--gamma', default=1, type=float, help='gamma parameter for KL-term in bernoulli VAE')   
+    
+    parser.add_argument('--flip', default=False, type=str2bool, help='enable flipping of Zs during image inverse')
 
     parser.add_argument('--dset_dir', default='/train/', type=str, help='dataset directory')
     parser.add_argument('--dataset', default='digits_gray', type=str, help='dataset name')
@@ -84,7 +89,6 @@ if __name__ == "__main__":
     parser.add_argument('--encoder_target_type', default='depth_black_white', type=str, help='types of supervised encoding')
     parser.add_argument('--image_size', default=32, type=int, help='image size. now only (64,64) is supported')
     parser.add_argument('--num_workers', default=8, type=int, help='dataloader num_workers')
-    parser.add_argument('--flip', default=False, type=str2bool, help='enable flipping of Zs during image inverse')
 
     parser.add_argument('--viz_on', default=True, type=str2bool, help='enable visdom visualization')
     parser.add_argument('--viz_name', default='main', type=str, help='visdom env name')

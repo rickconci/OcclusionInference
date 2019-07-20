@@ -41,8 +41,7 @@ def default_loader(path):
     
 
 class MyDataset_encoder(Dataset):
-    def __init__(self,image_paths, target_paths, image_size, encoder_target_type, train_test_gnrl, 
-                 train_data_size, test_data_size):
+    def __init__(self,image_paths, target_paths, image_size, encoder_target_type, train_test_gnrl, train_data_size, test_data_size):
         self.image_paths = image_paths
         self.target_paths = target_paths
         self.image_size = image_size
@@ -58,7 +57,6 @@ class MyDataset_encoder(Dataset):
             gnrl_data_size = len(os.listdir(image_paths))
             print("Sorting gnrl image files")
             self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(0,gnrl_data_size)]
-            self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(0,gnrl_data_size)]
         
         targets = one_hot_targets(target_paths,train_test_gnrl, train_data_size,test_data_size)
         
@@ -97,34 +95,63 @@ class MyDataset_encoder(Dataset):
         return len(os.listdir(self.image_paths))
 
 class MyDataset_decoder(Dataset):
-    def __init__(self,image_paths, target_paths, image_size , encoder_target_type, train_test, 
-                 train_data_size, test_data_size):
-        self.image_paths = image_paths
-        self.target_paths = target_paths
+    def __init__(self,x_paths, y_paths, image_size , encoder_target_type, train_test_gnrl, train_data_size, test_data_size):
+        self.x_paths = x_paths
+        self.y_paths = y_paths
         self.image_size = image_size
-        print("Sorting image & targets files")
-        self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(len(os.listdir(image_paths)))]
-        self.files_tgt = [target_paths+ 'inverse_{}.bmp'.format(i) for i in range(len(os.listdir(target_paths)))]
+        self.train_data_size = train_data_size
+        self.test_data_size = test_data_size
+        self.train_test_gnrl = train_test_gnrl
+        
+        if train_test_gnrl == 'train':
+            print("Sorting train image files")
+            self.files_img = [y_paths+ 'orig_{}.png'.format(i) for i in range(0,train_data_size)]       
+        elif train_test_gnrl == 'test':
+            print("Sorting test image files")
+            tot_data_size = train_data_size + test_data_size
+            self.files_img = [y_paths+ 'orig_{}.png'.format(i) for i in range(train_data_size, tot_data_size)] 
+        elif train_test_gnrl == 'gnrl':
+            gnrl_data_size = len(os.listdir(image_paths))
+            print("Sorting gnrl image files")
+            self.files_img = [y_paths+ 'orig_{}.png'.format(i) for i in range(0,gnrl_data_size)]
+        
+        inputs = one_hot_targets(x_paths,train_test_gnrl, train_data_size,test_data_size)
+        
+        if encoder_target_type=='joint':
+            self.digt_targets = inputs.joint_targets()
+        elif encoder_target_type=='black_white':
+            self.digt_targets = inputs.depth_black_white_one_hot(depth=False, xy=False)
+        elif encoder_target_type=='depth_black_white':
+            self.digt_targets = inputs.depth_black_white_one_hot(depth=True, xy=False)
+            #print(type(self.digt_targets))
+        elif encoder_target_type=='depth_black_white_xy_xy':
+            self.digt_targets = inputs.depth_black_white_one_hot(depth=True, xy=True)
+            #print(type(self.digt_targets))
+        else:
+            raise NotImplementedError('encoder type not correct')
+        
     def __getitem__(self, index):
-    
-        x_sample = default_loader(self.files_img[index])
-        y_sample = default_loader(self.files_tgt[index])
+        
+        x_sample = self.digt_targets[index,:] 
+        y_sample = default_loader(self.files_img[index])
 
         transform = transforms.Compose([
             transforms.Resize((self.image_size, self.image_size), interpolation=PIL.Image.NEAREST),
             transforms.Grayscale(),
             transforms.ToTensor(),])
-        self.x = transform(x_sample)
-        self.y = transform(y_sample)
-        self.x[0,:,:][self.x[0,:,:] == torch.median(self.x[0,:,:])] = 0.5
-        self.y[0,:,:][self.y[0,:,:] == torch.median(self.y[0,:,:])] = 0.5
+        
+        y = transform(y_sample)
+        y[0,:,:][y[0,:,:] == torch.median(y[0,:,:])] = 0.5
 
-        sample = {'x':self.x, 'y':self.y}
+        sample = {'x':x_sample, 'y':y}
         return sample
         #return self.x, self.y
 
     def __len__(self):
-        return len(os.listdir(self.image_paths))
+        if self.train_test_gnrl == 'train':
+            return self.train_data_size
+        elif self.train_test_gnrl == 'test':
+            return self.test_data_size
     
     
     
@@ -135,6 +162,7 @@ class one_hot_targets():
         
         self.train_data = data.iloc[:train_data_size, :]
         self.test_data = data.iloc[train_data_size:, :]
+        
         self.train_test_type = train_test_type
         self.train_data_size = train_data_size
         self.test_data_size= test_data_size
@@ -150,6 +178,14 @@ class one_hot_targets():
             self.y_front = self.train_data.iloc[:, 23].values.astype(float)
         elif train_test_type=='test':
             self.digt_list_test = self.test_data.iloc[:, [5,21]].values.astype(int)
+            cols_test = self.test_data.iloc[:, [12, 32]].values/255
+            self.cols_test = cols_test.astype(int)
+            self.x_back = self.test_data.iloc[:, 6].values.astype(float)
+            self.y_back= self.test_data.iloc[:, 7].values.astype(float)
+            self.x_front = self.test_data.iloc[:, 22].values.astype(float)
+            self.y_front = self.test_data.iloc[:, 23].values.astype(float)
+        elif train_test_type=='gnrl':
+            self.digt_list_gnrl = self.gnrl_data.iloc[:, [5,21]].values.astype(int)
             cols_test = self.test_data.iloc[:, [12, 32]].values/255
             self.cols_test = cols_test.astype(int)
             self.x_back = self.test_data.iloc[:, 6].values.astype(float)
@@ -241,7 +277,6 @@ def return_data_sup_encoder(args):
 
     train_data_size = len(os.listdir(train_image_paths))
     test_data_size = len(os.listdir(test_image_paths))
-
     
     dset_train = MyDataset_encoder
     train_kwargs = {'image_paths':train_image_paths,
@@ -297,3 +332,91 @@ def return_data_sup_decoder(args):
     batch_size = args.batch_size
     num_workers = args.num_workers
     image_size = args.image_size
+    assert image_size == 32
+    encoder_target_type = args.encoder_target_type
+
+    
+    x_train_paths = "{}digts.csv".format(dset_dir)
+    y_train_paths = "{}train/orig/".format(dset_dir) 
+    
+    x_test_paths = "{}digts.csv".format(dset_dir)
+    y_test_paths ="{}test/orig/".format(dset_dir) 
+
+    train_data_size = len(os.listdir(y_train_paths))
+    test_data_size = len(os.listdir(y_test_paths))
+    
+    train_data_size = 0
+    for file in os.listdir(y_train_paths):
+        if file.endswith(".png"):
+            train_data_size +=1
+    #print(train_data_size)
+    
+    
+    dset_train = MyDataset_decoder
+    train_kwargs = {'x_paths':x_train_paths,
+                    'y_paths': y_train_paths,
+                    'image_size': image_size, 
+                   'encoder_target_type':encoder_target_type,
+                   'train_test_gnrl': 'train',
+                    'train_data_size': train_data_size,
+                    'test_data_size':test_data_size}
+
+    train_data = dset_train(**train_kwargs) 
+    train_loader = DataLoader(train_data,
+                              batch_size=batch_size,
+                              shuffle=False,
+                              num_workers=num_workers,
+                              pin_memory=True,
+                            drop_last=False)
+
+   
+    dset_test= MyDataset_decoder
+    test_kwargs = {'x_paths':x_test_paths,
+                    'y_paths': y_test_paths,
+                    'image_size': image_size, 
+                   'encoder_target_type':encoder_target_type,
+                   'train_test_gnrl': 'test',
+                    'train_data_size': train_data_size,
+                    'test_data_size':test_data_size}
+
+    test_data = dset_test(**test_kwargs)
+    test_loader = DataLoader(test_data,
+                              batch_size=batch_size,
+                              shuffle=False,
+                              num_workers=num_workers,
+                              pin_memory=True,
+                              drop_last=False)
+   
+
+    x_gnrl_paths = "{}digts_gnrl.csv".format(dset_dir)
+    y_gnrl_paths = os.path.join(dset_dir + "gnrl/orig/")
+    
+    if os.path.exists(y_gnrl_paths):
+        dset_gnrl = MyDataset_decoder
+        gnrl_kwargs = {'x_paths':x_gnrl_paths,
+                       'y_paths': y_gnrl_paths,
+                        'image_size': image_size,
+                       'encoder_target_type':encoder_target_type,
+                       'train_test_gnrl':'gnrl',
+                       'train_data_size':train_data_size,
+                       'test_data_size': test_data_size}
+        gnrl_data = dset_gnrl(**gnrl_kwargs) 
+        gnrl_loader = DataLoader(gnrl_data,
+                                  batch_size=200,
+                                  shuffle=False,
+                                  num_workers=num_workers,
+                                  pin_memory=True,
+                                  drop_last=False)
+    
+        gnrl_data_size = len(os.listdir(gnrl_image_paths))
+        
+        print('{} train images, {} test images {} generalisation images"'.format(
+            train_data_size, test_data_size, gnrl_data_size))
+    else:
+        gnrl_loader = 0
+        gnrl_data = 0
+        print('{} train images, {} test images"'.format(
+            train_data_size, test_data_size))
+
+    
+    return train_loader, test_loader, gnrl_loader, test_data

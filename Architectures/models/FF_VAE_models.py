@@ -41,17 +41,17 @@ class FF_gauss_VAE(nn.Module):
         print('using FF_gauss_VAE')
         #assume initial size is 32 x 32 
         self.encoder = nn.Sequential(
-            nn.Conv2d(nc, self.n_filter, 4, 2, 1),          # B,  32, 16, 16
+            nn.Conv2d(nc, n_filter, 4, 2, 1),          # B,  32, 16, 16
             nn.ReLU(True),
             nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
-            nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  8,  8
+            nn.Conv2d(n_filter, n_filter, 4, 2, 1),          # B,  32,  8,  8
             nn.ReLU(True),
             nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
-            nn.Conv2d(self.n_filter, self.n_filter, 4, 2, 1),          # B,  32,  4,  4
+            nn.Conv2d(n_filter, n_filter, 4, 2, 1),          # B,  32,  4,  4
             nn.ReLU(True),
             nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
-            View((-1, self.n_filter*4*4)),                  # B, 512
-            nn.Linear(self.n_filter*4*4, 256),              # B, 256
+            View((-1, n_filter*4*4)),                  # B, 512
+            nn.Linear(n_filter*4*4, 256),              # B, 256
             nn.ReLU(True),
             nn.Linear(256, 256),                 # B, 256
             nn.ReLU(True),
@@ -68,17 +68,17 @@ class FF_gauss_VAE(nn.Module):
                 nn.ReLU(True),
                 nn.Linear(256, 256),                 # B, 256
                 nn.ReLU(True),
-                nn.Linear(256, self.n_filter*4*4),              # B, 512
+                nn.Linear(256, n_filter*4*4),              # B, 512
                 nn.ReLU(True),
-                View((-1, self.n_filter, 4, 4)),                # B,  32,  4,  4
-                nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32,  8,  8
-                nn.ReLU(True),
-                nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
-                nn.ConvTranspose2d(self.n_filter, self.n_filter, 4, 2, 1), # B,  32, 16, 16
+                View((-1, n_filter, 4, 4)),                # B,  32,  4,  4
+                nn.ConvTranspose2d(n_filter, n_filter, 4, 2, 1), # B,  32,  8,  8
                 nn.ReLU(True),
                 nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
-                nn.ConvTranspose2d(self.n_filter, nc, 4, 2, 1), # B,  32, 32, 32
+                nn.ConvTranspose2d(n_filter, n_filter, 4, 2, 1), # B,  32, 16, 16
+                nn.ReLU(True),
                 nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.),
+                nn.ConvTranspose2d(n_filter, nc, 4, 2, 1), # B,  32, 32, 32
+                
             )
         self.weight_init() 
         
@@ -94,8 +94,7 @@ class FF_gauss_VAE(nn.Module):
             distributions = self._encode(x)
             mu = distributions[:, :self.z_dim_tot]
             logvar = distributions[:, self.z_dim_tot:]
-            print(mu.shape)
-            print(logvar.shape)
+           
             z = reparametrize_gaussian(mu, logvar)
             if self.sbd:
                 z = self.sbd_model(z)
@@ -290,13 +289,10 @@ class FF_hybrid_VAE(nn.Module):
     
 def kaiming_init(m):
     if isinstance(m, (nn.Linear, nn.Conv2d)):
-        init.kaiming_normal(m.weight)
+        init.kaiming_normal(m.weight, nonlinearity='relu')
         if m.bias is not None:
             m.bias.data.fill_(0)
-    elif isinstance(m, (nn.BatchNorm1d, nn.BatchNorm2d)):
-        m.weight.data.fill_(1)
-        if m.bias is not None:
-            m.bias.data.fill_(0)
+
 
             
             

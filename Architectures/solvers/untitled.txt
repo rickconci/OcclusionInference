@@ -1,0 +1,154 @@
+    
+        
+        
+
+    
+class BLT_gauss_VAE(nn.Module):
+    def __init__(self, z_dim_bern, z_dim_gauss, nc, sbd):
+        super(BLT_gauss_VAE, self).__init__()
+        self.z_dim_tot = z_dim_gauss
+        self.sbd = sbd
+        
+        print("using BLT_gauss_VAE")
+        print("z_dim_gauss:" , z_dim_gauss, "z_dim_bern:", z_dim_bern)
+        
+        self.encoder = BLT_mod_encoder(z_dim_bern, z_dim_gauss, nc )
+        
+    
+    def forward(self, x,  train=True ):
+        if train==True:
+            distributions = self._encode(x)
+            #print(distributions.shape)
+            mu = distributions[:, :self.z_dim_tot]
+            logvar = distributions[:, self.z_dim_tot:]
+            z = reparametrize_gaussian(mu, logvar)
+            if self.sbd:
+                z = self.sbd_model(z)
+            x_recon = self._decode(z)
+            x_recon = x_recon.view(x.size())
+            return x_recon, mu, logvar
+        elif train ==False:
+            distributions = self._encode(x)
+            mu = distributions[:, :self.z_dim_tot]
+            if self.sbd:
+                 mu = spatial_broadcast_decoder(mu)
+            x_recon = self._decode(mu)
+            x_recon = x_recon.view(x.size())
+            return x_recon
+    
+    def _encode(self,x):
+        return(self.encoder(x))
+    
+    def _decode(self,z):
+        return(self.decoder(z))
+    
+    
+class BLT_brnl_VAE(nn.Module):
+    def __init__(self, z_dim_bern, z_dim_gauss, nc, sbd):
+        super(BLT_brnl_VAE, self).__init__()
+        self.z_dim_tot = z_dim_bern
+        self.sbd = sbd
+        self.encoder = BLT_mod_encoder(z_dim_bern, z_dim_gauss, nc )
+        print('using BLT_brnl_VAE')
+        print("z_dim_gauss:" , z_dim_gauss, "z_dim_bern:", z_dim_bern)
+        
+        if sbd == True:
+            self.decoder = SB_decoder(z_dim_bern, z_dim_gauss, nc)
+            self.sbd_model = spatial_broadcast_decoder()
+            print("with spatial broadcast decoder")
+        else:
+            self.decoder = BLT_mod_decoder(z_dim_bern, z_dim_gauss, nc)
+            print("without spatial broadcast decoder")
+            
+    def forward(self, x, current_flip_idx_norm=None, train=True ):
+       
+        if train==True:
+            p_dist = self._encode(x)
+            p_dist = F.sigmoid(p_dist)
+            if current_flip_idx_norm is not None:
+                indx_vec = torch.zeros(p.size(0),1)
+                ones = torch.ones(p.size(0),1)
+                indx_vec = indx_vec + ones[current_flip_idx_norm]
+                delta_mat = torch.zeros(p.size())
+                
+            z = reparametrize_bernoulli(p_dist)
+            if self.sbd:
+                z = self.sbd_model(z)
+                
+            x_recon = self._decode(z)
+            x_recon = x_recon.view(x.size())
+            return x_recon, p_dist
+        elif train ==False:
+            p_dist = self._encode(x)
+            x_recon = self._decode(p_dist)
+            x_recon = x_recon.view(x.size())
+            return x_recon
+    
+    def _encode(self,x):
+        return(self.encoder(x))
+    
+    def _decode(self,z):
+        return(self.decoder(z))  
+    
+    
+class BLT_hybrid_VAE(nn.Module):
+    def __init__(self, z_dim_bern, z_dim_gauss, nc, sbd):
+        super(BLT_hybrid_VAE, self).__init__()
+        self.z_dim_gauss = z_dim_gauss
+        self.z_dim_bern = z_dim_bern
+        self.z_dim_tot = z_dim_gauss + z_dim_bern
+        self.encoder = BLT_mod_encoder(z_dim_bern, z_dim_gauss, nc)
+        
+        print('using BLT_hybrid_VAE')
+        print("z_dim_gauss:" , z_dim_gauss, "z_dim_bern:", z_dim_bern)
+        
+        if sbd == True:
+            self.decoder = SB_decoder(z_dim_bern, z_dim_gauss, nc)
+            self.sbd_model = spatial_broadcast_decoder()
+            print("with spatial broadcast decoder")
+        else:
+            self.decoder = BLT_mod_decoder(z_dim_bern, z_dim_gauss, nc)
+            print("without spatial broadcast decoder")
+            
+            
+    def forward(self, x, current_flip_idx_norm=None, train=True ):
+        if train==True:
+            distributions = self._encode(x)
+            p = distributions[:, :self.z_dim_bern]
+            mu = distributions[:,self.z_dim_bern:(self.z_dim_bern+self.z_dim_gauss) ]
+            logvar = distributions[:, (self.z_dim_bern+self.z_dim_gauss):]
+            #flip 1st z of all images that are inverted
+            p = F.sigmoid(p)
+            if current_flip_idx_norm is not None:
+                delta_mat = torch.zeros(p.size())
+                delta_mat[current_flip_idx_norm,1]=1
+                p = p - 2*delta_mat*p + delta_mat
+            #reparametrise
+            bern_z = reparametrize_bernoulli(p)
+            gaus_z = reparametrize_gaussian(mu, logvar)
+            joint_z = torch.cat((bern_z,gaus_z), 1)
+            
+            if self.sbd:
+                joint_z = self.sbd_model(joint_z)
+            
+            x_recon = self._decode(joint_z)
+            x_recon = x_recon.view(x.size())
+            return x_recon, p, mu, logvar
+        elif train ==False:
+            distributions = self._encode(x)
+            p = distributions[:, :self.z_dim_bern]
+            mu = distributions[:,self.z_dim_bern:(self.z_dim_bern+self.z_dim_gauss) ]
+            joint_z = torch.cat((p,mu), 1)
+            x_recon = self._decode(joint_z)
+            #print(x_recon.shape)
+            #print(x_recon.shape)
+            return x_recon
+
+    
+    def _encode(self,x):
+        return(self.encoder(x))
+    
+    def _decode(self,z):
+        return(self.decoder(z))  
+
+            

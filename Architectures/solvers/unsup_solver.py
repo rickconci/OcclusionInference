@@ -30,8 +30,7 @@ sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/Occlusion
 
 from data_loaders.dataset_unsup import return_data_unsupervised
 #from data_loaders.dataset_sup import return_data_sup_encoder
-from models.BLT_models import BLT_gauss_VAE, BLT_brnl_VAE, BLT_hybrid_VAE
-from models.FF_VAE_models import FF_gauss_VAE, FF_brnl_VAE, FF_hybrid_VAE
+from models.BLT_models import multi_VAE, SB_decoder, spatial_broadcast_decoder
 from models.Lin_model import Lin_model 
 
 from solvers.visuals_mod import traverse_z,construct_z_hist,  plotsave_tests
@@ -116,40 +115,14 @@ class Solver_unsup(object):
     def __init__(self, args):
         self.use_cuda = args.cuda and torch.cuda.is_available()
         
-        self.model = args.model
-        self.max_epoch = args.max_epoch
-        self.global_iter = 0
+        self.encoder = args.encoder
+        self.decoder = args.decoder
+        self.z_dim_bern = args.z_dim_bern
+        self.z_dim_gauss= args.z_dim_gauss
         
-        
-        self.z_dim = args.z_dim
-        self.bs = args.batch_size
-        self.flip= args.flip
-        self.testing_method = args.testing_method
-        self.encoder_target_type = args.encoder_target_type
-        
-        if args.z_dim_bern is None and args.z_dim_gauss is None:
-            if args.model =='FF_hybrid_VAE' or args.model =='BLT_hybrid_VAE':
-                self.z_dim_bern = math.floor(args.z_dim/2)
-                self.z_dim_gauss = math.ceil(args.z_dim/2)
-            elif args.model =='FF_bnrl_VAE' or args.model =='BLT_brnl_VAE':
-                 self.z_dim_bern = self.z_dim
-            elif args.model =='FF_gauss_VAE' or args.model =='BLT_gauss_VAE':
-                 self.z_dim_gauss = self.z_dim
-                
-        else:
-            self.z_dim_bern = args.z_dim_bern
-            self.z_dim_gauss = args.z_dim_gauss
-            
         self.n_filter = args.n_filter
-        self.sbd = args.spatial_broadcast_decoder
-
-        self.image_size = args.image_size
-        self.beta = args.beta
-        self.gamma = args.gamma
-        self.model = args.model
-        self.lr = args.lr
-        self.beta1 = args.beta1
-        self.beta2 = args.beta2
+        self.n_rep = args.n_rep
+        self.sbd = args.sbd
         
         if args.dataset.lower() == 'digits_gray':
             self.nc = 1
@@ -157,48 +130,56 @@ class Solver_unsup(object):
             self.nc = 3
         else:
             raise NotImplementedError
-            
-        if args.model == 'FF_gauss_VAE':
-            net = FF_gauss_VAE(self.z_dim, self.n_filter, self.nc,self.sbd )
-        elif args.model == 'FF_brnl_VAE':
-            net = FF_brnl_VAE(self.z_dim, self.n_filter, self.nc)
-        elif args.model =='FF_hybrid_VAE':
-            net = FF_hybrid_VAE(self.z_dim_bern,self.z_dim_gauss, self.n_filter, self.nc)
         
-        elif args.model =='BLT_gauss_VAE':
-            net = BLT_gauss_VAE(0, self.z_dim_gauss, self.nc, self.sbd)
-        elif args.model =='BLT_brnl_VAE':
-            net = BLT_brnl_VAE(self.z_dim_bern, 0, self.nc, self.sbd)
-        elif args.model =='BLT_hybrid_VAE':
-            net = BLT_hybrid_VAE(self.z_dim_bern, self.z_dim_gauss, self.nc, self.sbd)
-        else:
-            raise NotImplementedError('Model not correct')
+        net = multi_VAE(self.encoder,self.decoder,self.z_dim_bern,self.z_dim_gauss,self.n_filter,self.nc,self.n_rep,self.sbd)
         
         print("CUDA availability: " + str(torch.cuda.is_available()))
-        
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-        
-        #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
         if torch.cuda.device_count()>1:
             print("Let's use", torch.cuda.device_count(), "GPUs!")
             net = nn.DataParallel(net)
             
-        # copy the model to each device
-        #self.net = cuda(net(self.z_dim, self.nc), self.use_cuda)
         self.net = net.to(self.device) 
-        if args.optim_type =='Adam':
-            self.optim = optim.Adam(self.net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
-        elif args.optim_type =='SGD':
-            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
-            
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
-        
         #print parameters in model
         tot_size = 0
         for parameter in self.net.parameters():
             tot_size += parameter.numel()
         print(tot_size ,"parameters in the network!")
-             
+        
+        self.lr = args.lr
+        self.beta1 = args.beta1
+        self.beta2 = args.beta2
+        if args.optim_type =='Adam':
+            self.optim = optim.Adam(self.net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
+        elif args.optim_type =='SGD':
+            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
+   
+        self.train_dl, self.test_dl, self.gnrl_dl, self.test_data, self.gnrl_data = return_data_unsupervised(args)
+        #self.sup_train_dl, self.sup_test_dl = return_data_sup_encoder(args)    
+        
+        self.max_epoch = args.max_epoch
+        self.global_iter = 0
+        self.gather_step = args.gather_step
+        self.display_step = args.display_step
+        self.save_step = args.save_step
+        
+        self.beta = args.beta
+        self.gamma = args.gamma
+        self.l2_loss = args.l2_loss
+        self.encoder_target_type = args.encoder_target_type
+        self.image_size = args.image_size
+
+        self.flip= args.flip
+        if self.flip==True:
+            self.flip_idx = pickle.load( open( "{}train_idx_to_flip.p".format(
+                args.dset_dir), "rb" ) )
+            self.flip_idx.sort()
+            print(self.flip_idx[0:20])
+            print(len(self.flip_idx), " flipped images!")
+        
+        self.gather = DataGather()
+        
         self.viz_name = args.viz_name
         self.viz_port = args.viz_port
         self.viz_on = args.viz_on
@@ -208,8 +189,6 @@ class Solver_unsup(object):
         self.win_var = None
         #if self.viz_on:
         #    self.viz = visdom.Visdom(port=self.viz_port)
-            
-        self.gather = DataGather()
         
         self.save_output = args.save_output
         self.output_dir = args.output_dir #os.path.join(args.output_dir, args.viz_name)
@@ -223,26 +202,7 @@ class Solver_unsup(object):
         if self.ckpt_name is not None:
             self.load_checkpoint(self.ckpt_name)
             
-        self.gather_step = args.gather_step
-        self.display_step = args.display_step
-        self.save_step = args.save_step
-
-        self.dset_dir = args.dset_dir
-        self.dataset = args.dataset
-        self.batch_size = args.batch_size
-        
-        self.train_dl, self.test_dl, self.gnrl_dl, self.test_data, self.gnrl_data = return_data_unsupervised(args)
-        #self.sup_train_dl, self.sup_test_dl = return_data_sup_encoder(args)
-        self.l2_loss = args.l2_loss
-       
-        
-        if self.flip==True:
-            self.flip_idx = pickle.load( open( "{}train_idx_to_flip.p".format(
-                args.dset_dir), "rb" ) )
-            self.flip_idx.sort()
-            print(self.flip_idx[0:20])
-            print(len(self.flip_idx), " flipped images!")
-               
+            
     def train(self):
         #self.net(train=True)
         iters_per_epoch = len(self.train_dl)
@@ -281,29 +241,23 @@ class Solver_unsup(object):
                 x = sample['x'].to(self.device)
                 y = sample['y'].to(self.device)
                 
-
-                if self.model == 'FF_gauss_VAE' or self.model == 'BLT_gauss_VAE':
-                    x_recon, mu, logvar = self.net(x, train=True)
-                    recon_loss = reconstruction_loss(y, x_recon)
+                x_recon, p_dist, mu, logvar = self.net(x, train=True)
+                
+                recon_loss = reconstruction_loss(y, x_recon)
+                
+                if self.z_dim_bern == 0:                    
                     total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(mu, logvar)
                     KL_loss = self.beta*total_kld
-                    loss = recon_loss + KL_loss
-                elif self.model == 'FF_brnl_VAE' or self.model == 'BLT_brnl_VAE':
-                    x_recon, p_dist = self.net(x, train=True)
-                    recon_loss = reconstruction_loss(y, x_recon)
+                elif self.z_dim_gauss == 0:
                     total_kld, dim_wise_kld, mean_kld = kl_divergence_bernoulli(p_dist)
                     KL_loss = self.gamma *total_kld 
-                    loss = recon_loss + KL_loss
-                elif self.model == 'FF_hybrid_VAE' or self.model =='BLT_hybrid_VAE':
-                    x_recon, p_dist, mu, logvar = self.net(x, train=True)
-                    recon_loss = reconstruction_loss(y, x_recon)
+                elif self.z_dim_bern !=0 and self.z_dim_gauss != 0:
                     total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
-                    total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(
-                        mu, logvar)
+                    total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(mu, logvar)
                     KL_loss = self.gamma *total_kld_bern + self.beta*total_kld_gauss
-                    loss = recon_loss + KL_loss
                     
-                
+                loss = recon_loss + KL_loss
+
                 self.adjust_learning_rate(self.optim, (count/iters_per_epoch))
                 self.optim.zero_grad()
                 loss.backward()
@@ -333,7 +287,7 @@ class Solver_unsup(object):
                                         test_kl_loss = self.test_kl_loss )
                 
                 if self.global_iter%self.display_step == 0:
-                    if self.model =='hybrid_VAE' or self.model =='BLT_hybrid_VAE':
+                    if self.z_dim_bern !=0 and self.z_dim_gauss != 0:
                         pbar.write('[{}] recon_loss:{:.3f} total_kld_gauss:{:.3f} mean_kld_gauss:{:.3f} total_kld_bern:{:.3f} mean_kld_bern:{:.3f}'.format(
                             self.global_iter, recon_loss.data,
                             total_kld_gauss.data[0], mean_kld_gauss.data[0], total_kld_bern.data[0],
@@ -342,21 +296,13 @@ class Solver_unsup(object):
                          pbar.write('[{}] recon_loss:{:.3f} total_kld:{:.3f} mean_kld:{:.3f} '.format(
                              self.global_iter, recon_loss.data, total_kld.data[0], mean_kld.data[0]))
                         
-                    if self.model != 'FF_bnrl_VAE' and self.model != 'BLT_brnl_VAE':
+                    if self.z_dim_bern !=0:
                         var = logvar.exp().mean(0).data
                         var_str = ''
                         for j, var_j in enumerate(var):
                             var_str += 'var{}:{:.4f} '.format(j+1, var_j)
                         pbar.write(var_str)
                       
-                    #if self.viz_on:
-                    #    print("now visdoming!")
-                    #    self.gather.insert(images=y.data)
-                    #    self.gather.insert(images=F.sigmoid(x_recon).data)
-                    #    self.viz_reconstruction()
-                    #    self.viz_lines()
-                    #    self.gather.flush()
-                        
                 if self.global_iter%self.save_step == 0:
                     self.save_checkpoint('last') 
                     oldtestLoss = self.testLoss
@@ -388,27 +334,20 @@ class Solver_unsup(object):
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
     
-    def run_model(self, model, x, y):
-        if model == 'FF_gauss_VAE' or model =='BLT_gauss_VAE':
-            x_recon, mu, logvar = self.net(x, train= True)
-            recon_loss = reconstruction_loss(y, x_recon)
+    def run_model(self, x, y):
+        x_recon, p_dist, mu, logvar = self.net(x, train=True)
+        recon_loss = reconstruction_loss(y, x_recon)
+        if self.z_dim_bern == 0:                    
             total_kld, dim_wise_kld, mean_kld = kl_divergence_gaussian(mu, logvar)
-            vae_loss = recon_loss + self.beta*total_kld
-            return([recon_loss, self.beta*total_kld] )
-        elif model == 'FF_brnl_VAE' or model =='BLT_brnl_VAE':
-            x_recon , p_dist = self.net(x, train=True)
-            recon_loss = reconstruction_loss(y, x_recon)
+            KL_loss = self.beta*total_kld
+        elif self.z_dim_gauss == 0:
             total_kld, dim_wise_kld, mean_kld = kl_divergence_bernoulli(p_dist)
-            vae_loss = recon_loss + self.gamma *total_kld  
-            return([recon_loss, self.gamma *total_kld  ] )
-        elif model == 'FF_hybrid_VAE' or model =='BLT_hybrid_VAE':
-            x_recon, p_dist, mu, logvar = self.net(x,train = True)
-            recon_loss = reconstruction_loss(y, x_recon)
+            KL_loss = self.gamma *total_kld 
+        elif self.z_dim_bern !=0 and self.z_dim_gauss != 0:
             total_kld_bern, dim_wise_kld_bern, mean_kld_bern = kl_divergence_bernoulli(p_dist)
             total_kld_gauss, dim_wise_kld_gauss, mean_kld_gauss = kl_divergence_gaussian(mu, logvar)
-            vae_loss = recon_loss + self.gamma *total_kld_bern + self.beta*total_kld_gauss
             KL_loss = self.gamma *total_kld_bern + self.beta*total_kld_gauss
-            return([recon_loss, KL_loss] ) 
+        return([recon_loss,KL_loss ])
     
     def test_loss(self):
         print("Calculating test loss")
@@ -421,7 +360,7 @@ class Solver_unsup(object):
             for sample in self.test_dl:
                 img = sample['x'].to(self.device)
                 trgt = sample['y'].to(self.device)
-                testLoss_list = self.run_model(self.model, img, trgt)
+                testLoss_list = self.run_model(img, trgt)
                 recon_loss += testLoss_list[0]
                 kl_loss += testLoss_list[1]
                 cnt += 1
@@ -447,7 +386,7 @@ class Solver_unsup(object):
             for sample in self.gnrl_dl:
                 img = sample['x'].to(self.device)
                 trgt = sample['y'].to(self.device)
-                gnrlLoss_list = self.run_model(self.model, img, trgt)
+                gnrlLoss_list = self.run_model(img, trgt)
                 recon_loss += gnrlLoss_list[0]
                 kl_loss += gnrlLoss_list[1]
                 cnt += 1
@@ -469,19 +408,26 @@ class Solver_unsup(object):
         
         print("creating sample images!")
         #Print sample images by decoding samples of normal distribution size of z_dim
-        if self.model =='FF_gauss_VAE' or 'BLT_gauss_VAE':
-            sample = torch.randn(16, self.z_dim)
-        elif self.model == 'FF_brnl_VAE' or 'BLT_bnrl_VAE':
-            sample = torch.rand(16, self.z_dim)
-        elif self.model=='FF_hybrid_VAE' or 'BLT_hybrid_VAE':
+        if self.z_dim_bern == 0:         
+            sample = torch.randn(16, self.z_dim_gauss)
+        elif self.z_dim_gauss == 0:         
+            sample = torch.rand(16, self.z_dim_bern)
+        elif self.z_dim_bern !=0 and self.z_dim_gauss != 0:
             sample_2 = torch.randn(16, self.z_dim_gauss)
             sample_1 = torch.rand(16, self.z_dim_bern)
-            sample = torch.cat((sample_1,samsple_2), 1)
+            sample = torch.cat((sample_1,sample_2), 1)
         with torch.no_grad():
-            test_recon = net_copy._decode(sample)
-            torchvision.utils.save_image( F.sigmoid(test_recon).view(
-                test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), '{}/sampling_z_{}.png'.
-                                         format(self.output_dir, self.global_iter))        
+            if self.sbd == True:
+                sbd_decoder = SB_decoder(self.z_dim_bern, self.z_dim_gauss, self.n_filter, self.nc)
+                sbd_model = spatial_broadcast_decoder()
+                sample = sbd_model(sample)
+                test_recon = sbd_decoder(sample)
+            else:
+                print(sample)
+                test_recon = net_copy._decode(sample)
+        torchvision.utils.save_image( F.sigmoid(test_recon).view(
+            test_recon.size(0),1, self.image_size, self.image_size).data.cpu(), '{}/sampling_z_{}.png'.
+                                        format(self.output_dir, self.global_iter))        
         
         print("Constructing Z hist!")
         construct_z_hist(net_copy, self.test_dl, self.global_iter, self.output_dir,dim='depth')
@@ -493,7 +439,7 @@ class Solver_unsup(object):
             for i in range(3):
                 example_id = self.test_data.__getitem__(i+random.randint(0,20))
                 traverse_z(net_copy, example_id, ID=str(i),output_dir=self.output_dir, 
-                           global_iter=self.global_iter, model= self.model, num_frames=100 )
+                           global_iter=self.global_iter, sbd = self.sbd, num_frames=100 )
     
         #create pdf with reconstructed test images 
         print('Reconstructing Test Images!')

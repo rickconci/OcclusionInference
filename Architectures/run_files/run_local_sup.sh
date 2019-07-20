@@ -1,12 +1,12 @@
 #! /bin/sh
 
-python main_mod.py --train True --ckpt_name None --model BLT_orig \
-    --testing_method supervised_encoder --encoder_target_type joint --z_dim 10 \
-    --batch_size 100 --lr 1e-2 --beta 0 \
-    --max_epoch 1 --gather_step 5 --display_step 6 --save_step 30 \
-    --dset_dir /Users/riccardoconci/Desktop/2_dig_fixed_random_bw/digts/ \
-    --output_dir /Users/riccardoconci/Desktop/code/ZuckermanProject/results/Results_BLT_sup_digt1 \
-    --ckpt_dir /Users/riccardoconci/Desktop/code/ZuckermanProject/results/Results_BLT_sup_digt1 \
+python main_mod.py --train True --ckpt_name None --testing_method supervised_decoder \
+    --encoder B --decoder BLT --sbd True --encoder_target_type depth_black_white_xy_xy --n_filter 32 --n_rep 4 \
+    --optim_type SGD --batch_size 100 --lr 1e-2 --beta 0 \
+    --max_epoch 10 --gather_step 50 --display_step 5 --save_step 20 \
+     --dset_dir /Users/riccardoconci/Desktop/100k_bw_ro/digts/ \
+    --output_dir /Users/riccardoconci/Desktop/code/ZuckermanProject/results/Results_loc_sup \
+    --ckpt_dir /Users/riccardoconci/Desktop/code/ZuckermanProject/results/Results_loc_vsup  \
 
 #End of script
 
