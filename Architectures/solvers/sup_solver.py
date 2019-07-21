@@ -227,7 +227,7 @@ class Solver_sup(object):
         self.batch_size = args.batch_size
         
         
-       
+        self.gather = DataGather()
         
     def train(self):
         #self.net(train=True)
@@ -260,7 +260,7 @@ class Solver_sup(object):
                     loss, final_out = self.run_model(self.testing_method, x, y, self.l2_loss)
                     train_accuracy = self.get_accuracy(final_out, y)
                 elif self.testing_method == 'supervised_decoder':
-                    x = x.type(torch.FloatTensor)
+                    x = x.type(torch.FloatTensor).to(self.device)
                     loss, recon = self.run_model(self.testing_method, x, y, self.l2_loss)
                     
                 self.adjust_learning_rate(self.optim, (count/iters_per_epoch))
@@ -324,6 +324,7 @@ class Solver_sup(object):
         elif self.testing_method =='supervised_decoder':
             if self.sbd:
                 x = self.sbd_model(x)
+                x = x.to(self.device)
             recon = self.net._decode(x)
             loss = supervised_decoder_loss(y, recon)
             l2 = 0

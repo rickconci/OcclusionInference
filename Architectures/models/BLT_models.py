@@ -107,7 +107,7 @@ class multi_decoder(nn.Module):
         
         self.Lin_1 = nn.Linear( z_dim_bern + z_dim_gauss, 256, bias=True)
         self.Lin_2 = nn.Linear(256, 256, bias=True) 
-        self.Lin_3 = nn.Linear(256, 32*4*4, bias=True) 
+        self.Lin_3 = nn.Linear(256, 32*4*4, bias=True)
         
         self.W_b_1 = nn.ConvTranspose2d(32, 32, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=True )
         self.W_l_1 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
@@ -286,11 +286,14 @@ class SB_decoder(nn.Module):
     
 class spatial_broadcast_decoder(nn.Module):
     def __init__(self, im_size=32):
+        self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         super(spatial_broadcast_decoder, self).__init__()
         self.im_size = im_size
         x = torch.linspace(-1, 1, im_size)
         y = torch.linspace(-1, 1, im_size)
         x_grid, y_grid = torch.meshgrid(x, y)
+        x_grid = x_grid.to(self.device)
+        y_grid = y_grid.to(self.device)
         # Add as constant, with extra dims for N and C
         self.register_buffer('x_grid', x_grid.view((1, 1) + x_grid.shape))
         self.register_buffer('y_grid', y_grid.view((1, 1) + y_grid.shape))
