@@ -45,18 +45,20 @@ class MyDataset_encoder(Dataset):
         self.image_paths = image_paths
         self.target_paths = target_paths
         self.image_size = image_size
-        
+        self.train_test_gnrl = train_test_gnrl
+        self.train_data_size = train_data_size
+        self.test_data_size = test_data_size
         if train_test_gnrl == 'train':
             print("Sorting train image files")
-            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(0,train_data_size)]       
+            self.files_img = [image_paths+ 'orig_{}.png'.format(i) for i in range(0,train_data_size)]       
         elif train_test_gnrl == 'test':
             print("Sorting test image files")
             tot_data_size = train_data_size + test_data_size
-            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(train_data_size, tot_data_size)] 
+            self.files_img = [image_paths+ 'orig_{}.png'.format(i) for i in range(train_data_size, tot_data_size)] 
         elif train_test_gnrl == 'gnrl':
-            gnrl_data_size = len(os.listdir(image_paths))
+            self.gnrl_data_size = len(os.listdir(image_paths))
             print("Sorting gnrl image files")
-            self.files_img = [image_paths+ 'orig_{}.bmp'.format(i) for i in range(0,gnrl_data_size)]
+            self.files_img = [image_paths+ 'orig_{}.png'.format(i) for i in range(0,self.gnrl_data_size)]
         
         targets = one_hot_targets(target_paths,train_test_gnrl, train_data_size,test_data_size)
         
@@ -89,10 +91,16 @@ class MyDataset_encoder(Dataset):
 
         sample = {'x':x, 'y':y_sample}
         return sample
-        #return self.x, self.y
 
     def __len__(self):
-        return len(os.listdir(self.image_paths))
+        if self.train_test_gnrl == 'train':
+            return self.train_data_size
+        elif self.train_test_gnrl == 'test':
+            return self.test_data_size
+        elif self.train_test_gnrl == 'gnrl':
+            return self.gnrl_data_size
+    
+        
 
 class MyDataset_decoder(Dataset):
     def __init__(self,x_paths, y_paths, image_size , encoder_target_type, train_test_gnrl, train_data_size, test_data_size):
@@ -283,6 +291,7 @@ def return_data_sup_encoder(args):
     batch_size = args.batch_size
     num_workers = args.num_workers
     image_size = args.image_size
+    output_dir =args.output_dir
     assert image_size == 32
     encoder_target_type = args.encoder_target_type
     print("encoding:",encoder_target_type )
@@ -297,6 +306,11 @@ def return_data_sup_encoder(args):
 
     train_data_size = len(os.listdir(train_image_paths))
     test_data_size = len(os.listdir(test_image_paths))
+    
+    train_data_size = 0
+    for file in os.listdir(train_image_paths):
+        if file.endswith(".png"):
+            train_data_size +=1
     
     dset_train = MyDataset_encoder
     train_kwargs = {'image_paths':train_image_paths,
@@ -335,15 +349,37 @@ def return_data_sup_encoder(args):
    
 
     gnrl_image_paths = os.path.join(dset_dir + "gnrl/orig/")
+    gnrl_target_paths = "{}digts_gnrl.csv".format(dset_dir)
     if os.path.exists(gnrl_image_paths):
         gnrl_data_size = len(os.listdir(gnrl_image_paths))
+        
+        
+        dset_gnrl = MyDataset_encoder
+        gnrl_kwargs = {'image_paths':gnrl_image_paths,
+                        'target_paths': gnrl_target_paths,
+                        'image_size': image_size, 
+                       'encoder_target_type':encoder_target_type,
+                       'train_test_gnrl': 'gnrl',
+                        'train_data_size': train_data_size,
+                        'test_data_size':test_data_size}
+
+        gnrl_data = dset_gnrl(**gnrl_kwargs) 
+        gnrl_loader = DataLoader(gnrl_data,
+                                  batch_size=batch_size,
+                                  shuffle=False,
+                                  num_workers=num_workers,
+                                  pin_memory=True,
+                                drop_last=False)
+
+        
+        
         print('{} train images, {} test images {} generalisation images"'.format(
             train_data_size, test_data_size, gnrl_data_size))
     else:
          print('{} train images, {} test images"'.format(
             train_data_size, test_data_size))
 
-    return train_loader, test_loader
+    return train_loader, test_loader, gnrl_loader
 
 
 def return_data_sup_decoder(args):

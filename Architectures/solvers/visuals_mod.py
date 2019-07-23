@@ -369,6 +369,126 @@ def plotLearningCurves(solver):
         plt.savefig('{}/Train_Test_Gnrl_loss_Curves.png'.format(solver.output_dir))
         plt.close()
     
+    elif solver.testing_method == 'supervised_encoder':
+        if solver.encoder_target_type== 'joint':
+            fig_lc = plt.figure(figsize = (8,8))
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training loss: {:.3f}, Final testing loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
+                               solver.params, solver.gather.data['train_loss'][-1],
+                               solver.gather.data['test_loss'][-1],
+                             solver.gather.data['gnrl_loss'][-1]), fontsize=14)
+
+            #plt.figure(figsize = (8,8))
+            plt.subplot()
+            plt.plot(solver.gather.data['iter'], solver.gather.data['train_loss'], 'coral', linewidth=2.5, label = "train  loss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['test_loss'], 'seagreen', linewidth=2, label = "test  loss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_loss'], 'dodgerblue', linewidth=2, label = "gnrl  loss")
+            plt.xlabel("iterations")
+            plt.ylabel("loss")
+            #plt.title("losses")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/Train_Test_Gnrl_loss_Curves.png'.format(solver.output_dir))
+            plt.close()
+            
+            
+            fig_lc = plt.figure(figsize = (8,8))
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training accuracy: {:.3f}, Final testing accuracy: {:.3f} , Final gnrl accuracy: {:.3f} '.format(
+                               solver.params, solver.gather.data['train_accuracy'][-1],
+                               solver.gather.data['test_accuracy'][-1],
+                             solver.gather.data['gnrl_accuracy'][-1]), fontsize=14)
+
+            #plt.figure(figsize = (8,8))
+            plt.subplot()
+            plt.plot(solver.gather.data['iter'], solver.gather.data['train_accuracy'], 'coral', linewidth=2.5, label = "train accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['test_accuracy'], 'seagreen', linewidth=2, label = "test accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_accuracy'], 'dodgerblue', linewidth=2, label = "gnrl accuracy")
+            plt.xlabel("iterations")
+            plt.ylabel("Accuracy")
+            #plt.title("losses")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/Train_Test_Gnrl_accuracy_Curves.png'.format(solver.output_dir))
+            plt.close()
+            
+
+            
+        else:
+            fig_lc = plt.figure(figsize = (8,8))
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training loss: {:.3f}, Final testing loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
+                               solver.params, solver.gather.data['train_loss'][-1],
+                               solver.gather.data['test_loss'][-1],
+                             solver.gather.data['gnrl_loss'][-1]), fontsize=14)
+
+            #plt.figure(figsize = (8,8))
+            plt.subplot()
+            plt.plot(solver.gather.data['iter'], solver.gather.data['train_loss'], 'coral', linewidth=2.5, label = "train loss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['test_loss'], 'seagreen', linewidth=2, label = "test  loss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_loss'], 'dodgerblue', linewidth=2, label = "gnrl  loss")
+            plt.xlabel("iterations")
+            plt.ylabel("loss")
+            #plt.title("losses")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/Train_Test_Gnrl_loss_Curves.png'.format(solver.output_dir))
+            plt.close()
+            
+            fig_lc = plt.figure(figsize = (8,8))
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \n Final train depth accuracy: {:.2f},  black accuracy: {:.2f} , white accuracy: {:.2f} '.format(
+                               solver.params, solver.gather.data['train_depth_accuracy'][-1],
+                               solver.gather.data['train_black_accuracy'][-1],
+                             solver.gather.data['train_white_accuracy'][-1]), fontsize=14)
+
+            #plt.figure(figsize = (8,8))
+            plt.subplot()
+            plt.plot(solver.gather.data['iter'], solver.gather.data['train_depth_accuracy'], 'coral', linewidth=2.5, label = "train_depth_accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['train_black_accuracy'], 'seagreen', linewidth=2, label = "train_black_accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['train_white_accuracy'], 'dodgerblue', linewidth=2, label = "train_white_accuracy")
+            plt.xlabel("iterations")
+            plt.ylabel("Accuracy")
+            #plt.title("losses")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/Train_accuracy_Curves.png'.format(solver.output_dir))
+            plt.close()
+            
+            fig_lc = plt.figure(figsize = (8,8))
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal test depth accuracy: {:.2f},  black accuracy: {:.2f} , white accuracy: {:.2f} '.format(
+                               solver.params, solver.gather.data['test_depth_accuracy'][-1],
+                               solver.gather.data['test_black_accuracy'][-1],
+                             solver.gather.data['test_white_accuracy'][-1]), fontsize=14)
+
+            #plt.figure(figsize = (8,8))
+            plt.subplot()
+            plt.plot(solver.gather.data['iter'], solver.gather.data['test_depth_accuracy'], 'coral', linewidth=2.5, label = "test_depth_accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['test_black_accuracy'], 'seagreen', linewidth=2, label = "test_black_accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['test_white_accuracy'], 'dodgerblue', linewidth=2, label = "test_white_accuracy")
+            plt.xlabel("Iterations")
+            plt.ylabel("Accuracy")
+            #plt.title("losses")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/Test_accuracy_Curves.png'.format(solver.output_dir))
+            plt.close()
+            
+            fig_lc = plt.figure(figsize = (8,8))
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal gnrl depth accuracy: {:.2f},  black accuracy: {:.2f} , white accuracy: {:.2f} '.format(
+                               solver.params, solver.gather.data['gnrl_depth_accuracy'][-1],
+                               solver.gather.data['gnrl_black_accuracy'][-1],
+                             solver.gather.data['gnrl_white_accuracy'][-1]), fontsize=14)
+
+            #plt.figure(figsize = (8,8))
+            plt.subplot()
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_depth_accuracy'], 'coral', linewidth=2.5, label = "gnrl_depth_accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_black_accuracy'], 'seagreen', linewidth=2, label = "gnrl_black_accuracy")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_white_accuracy'], 'dodgerblue', linewidth=2, label = "gnrl_white_accuracy")
+            plt.xlabel("Iterations")
+            plt.ylabel("Accuracy")
+            #plt.title("losses")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/Gnrl_accuracy_Curves.png'.format(solver.output_dir))
+            plt.close()
+            
     
     
 def plotFilters(self, figIdx = None, colorLimit = 'common'):
