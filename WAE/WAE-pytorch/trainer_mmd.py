@@ -43,7 +43,7 @@ class Trainer(object):
             raise NotImplementedError
 
         net = WAE(self.z_dim, self.nc)
-        self.optim = optim.Adam(self.net.parameters(), lr=self.lr,
+        self.optim = optim.Adam(net.parameters(), lr=self.lr,
                                     betas=(self.beta1, self.beta2))
         
         print("CUDA availability: " + str(torch.cuda.is_available()))
@@ -65,7 +65,10 @@ class Trainer(object):
         self.viz_port = args.viz_port
         self.viz_on = args.viz_on
         if self.viz_on:
-            self.viz = visdom.Visdom(env=self.viz_name+'_lines', port=self.viz_port)
+            cfg = {"server": "localhost",
+                   "port": 8097}
+            self.viz = visdom.Visdom('http://' + cfg["server"], 
+                                     env=self.viz_name+'_lines', port = cfg["port"])
             self.win_recon = None
             self.win_mmd = None
             self.win_mu = None

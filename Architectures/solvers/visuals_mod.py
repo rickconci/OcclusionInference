@@ -215,9 +215,10 @@ def visualise_tsne():
     
     
 def plot_decoder_img(NN, test_data, pdf_path, global_iter, sbd, type, n=20 ):
-    if type =='Test':
+   
+    if type =='test':
         pdf_path = "{}/testing_recon{}.pdf".format(pdf_path, global_iter)
-    elif type =='Gnrl':
+    elif type =='gnrl':
         pdf_path = "{}/gnrl_recon{}.pdf".format(pdf_path, global_iter)
         
     pdf = matplotlib.backends.backend_pdf.PdfPages(pdf_path)
@@ -257,8 +258,9 @@ def plotsave_tests(NN, test_data, pdf_path, global_iter, type, n=20, ):
     
     if type =='Test':
         pdf_path = "{}/testing_recon{}.pdf".format(pdf_path, global_iter)
-    elif type =='Gnrl':
+    elif type =='Grnl':
         pdf_path = "{}/gnrl_recon{}.pdf".format(pdf_path, global_iter)
+    
     
     pdf = matplotlib.backends.backend_pdf.PdfPages(pdf_path)
 
@@ -291,63 +293,81 @@ def plotsave_tests(NN, test_data, pdf_path, global_iter, type, n=20, ):
 def plotLearningCurves(solver):
     """ plotting learning curves (training and testing losses and accuracies)
     """
+    if solver.testing_method == 'unsupervised':
     
-    
-    #fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training acc: {:.2f}%, Final testing acc: {:.2f}%'.format(
-     #                  solver.net.get_n_params(trainable=True), solver.gather.data['train_acc'][-1]*100,
-     #                  solver.gather.data['test_acc'][-1]*100), fontsize=14)
-    plt.figure(figsize = (8,8))
-    plt.subplot()
-    plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'b', linewidth=2, label = "test loss")
-    plt.xlabel("iterations")
-    plt.ylabel("loss")
-    #plt.title("losses")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('{}/Train_Test_loss_Curves.png'.format(solver.output_dir))
-    plt.close()
-    
-    plt.figure(figsize = (8,8))
-    plt.subplot()
-    plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'coral', linewidth=2.5, label = "trainLoss")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['train_recon_loss'], 'seagreen', linewidth=2.5, label = "train_recon_loss")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['train_KL_loss'], 'dodgerblue', linewidth=2.5, label = "train_KL_loss")
-    plt.xlabel("iterations")
-    plt.ylabel("loss")
-    #plt.title("losses")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('{}/Train_Loss_Curves.png'.format(solver.output_dir))
-    plt.close()
-    
-    plt.figure(figsize = (8,8))
-    plt.subplot()
-    plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'coral', linewidth=2.5, label = "testLoss")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['test_recon_loss'], 'seagreen', linewidth=2.5, label = "train_recon_loss")
-    plt.plot(solver.gather.data['iter'], solver.gather.data['test_kl_loss'], 'dodgerblue', linewidth=2.5, label = "test KL_loss")
-    plt.xlabel("iterations")
-    plt.ylabel("loss")
-    #plt.title("losses")
-    plt.legend()
-    plt.grid(True)
-    plt.savefig('{}/Test_Loss_Curves.png'.format(solver.output_dir))
-    plt.close()
-    
-    if solver.gather.data['grnlLoss'] :
+       
         plt.figure(figsize = (8,8))
         plt.subplot()
         plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
-        plt.plot(solver.gather.data['iter'], solver.gather.data['grnlLoss'], 'coral', linewidth=2.5, label = "grnlLoss")
-        plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_recon_loss'], 'seagreen', linewidth=2.5, label = "gnrl_recon_loss")
-        plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_kl_loss'], 'dodgerblue', linewidth=2.5, label = "test gnrl_KL_loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'b', linewidth=2, label = "test loss")
         plt.xlabel("iterations")
         plt.ylabel("loss")
         #plt.title("losses")
         plt.legend()
         plt.grid(True)
-        plt.savefig('{}/Gnrl_Loss_Curves.png'.format(solver.output_dir))
+        plt.savefig('{}/Train_Test_loss_Curves.png'.format(solver.output_dir))
+        plt.close()
+
+        plt.figure(figsize = (8,8))
+        plt.subplot()
+        plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'coral', linewidth=2.5, label = "trainLoss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['train_recon_loss'], 'seagreen', linewidth=2.5, label = "train_recon_loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['train_KL_loss'], 'dodgerblue', linewidth=2.5, label = "train_KL_loss")
+        plt.xlabel("iterations")
+        plt.ylabel("loss")
+        #plt.title("losses")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig('{}/Train_Loss_Curves.png'.format(solver.output_dir))
+        plt.close()
+
+        plt.figure(figsize = (8,8))
+        plt.subplot()
+        plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'coral', linewidth=2.5, label = "testLoss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['test_recon_loss'], 'seagreen', linewidth=2.5, label = "train_recon_loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['test_kl_loss'], 'dodgerblue', linewidth=2.5, label = "test KL_loss")
+        plt.xlabel("iterations")
+        plt.ylabel("loss")
+        #plt.title("losses")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig('{}/Test_Loss_Curves.png'.format(solver.output_dir))
+        plt.close()
+
+        if solver.gather.data['grnlLoss'] :
+            plt.figure(figsize = (8,8))
+            plt.subplot()
+            plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['grnlLoss'], 'coral', linewidth=2.5, label = "grnlLoss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_recon_loss'], 'seagreen', linewidth=2.5, label = "gnrl_recon_loss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_kl_loss'], 'dodgerblue', linewidth=2.5, label = "test gnrl_KL_loss")
+            plt.xlabel("iterations")
+            plt.ylabel("loss")
+            #plt.title("losses")
+            plt.legend()
+            plt.grid(True)
+            plt.savefig('{}/Gnrl_Loss_Curves.png'.format(solver.output_dir))
+    
+    elif solver.testing_method == 'supervised_decoder':
+        fig_lc = plt.figure(figsize = (8,8))
+        fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal training loss: {:.3f}, Final testing loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
+                           solver.params, solver.gather.data['train_recon_loss'][-1],
+                           solver.gather.data['test_recon_loss'][-1],
+                         solver.gather.data['gnrl_recon_loss'][-1]), fontsize=14)
+        
+        #plt.figure(figsize = (8,8))
+        plt.subplot()
+        plt.plot(solver.gather.data['iter'], solver.gather.data['train_recon_loss'], 'coral', linewidth=2.5, label = "train reconstruction loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['test_recon_loss'], 'seagreen', linewidth=2, label = "test reconstruction loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_recon_loss'], 'dodgerblue', linewidth=2, label = "gnrl reconstruction loss")
+        plt.xlabel("iterations")
+        plt.ylabel("loss")
+        #plt.title("losses")
+        plt.legend()
+        plt.grid(True)
+        plt.savefig('{}/Train_Test_Gnrl_loss_Curves.png'.format(solver.output_dir))
+        plt.close()
     
     
     

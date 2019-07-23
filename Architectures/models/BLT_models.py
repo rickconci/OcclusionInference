@@ -88,6 +88,7 @@ class multi_encoder(nn.Module):
                     Z_2 = self.W_b_2(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) + self.W_t_2(self.LRN(F.relu(Z_3))) 
                     Z_3 = self.W_b_3(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3))) 
             
+        
         read_z = self.Lin_1(self.LRN(F.relu(Z_3)).view(-1, 32*4*4 ))
         read_z_2 = self.Lin_2(F.relu(read_z))
         final_z = self.Lin_3(F.relu(read_z_2))
@@ -127,13 +128,11 @@ class multi_decoder(nn.Module):
     def weight_init(self):
         for block in self._modules.values():
             if isinstance(block, (nn.Linear, nn.Conv2d)):
+                print(block)
                 init.kaiming_normal(block.weight,  nonlinearity='relu')
                 if block.bias is not None:
                     block.bias.data.fill_(0)
-            elif isinstance(block, (nn.ConvTranspose2d)):
-                init.kaiming_normal(block.weight, mode='fan_out', nonlinearity='relu')
-                if block.bias is not None:
-                    block.bias.data.fill_(0)
+            
                     
     def forward(self, z):
         if self.decoder == 'B':
@@ -166,8 +165,8 @@ class multi_decoder(nn.Module):
         elif self.decoder == 'BLT':
             for t in range(self.n_rep):
                 if t <1:
-                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z)))))
-                    Z_2 = self.W_b_1(F.relu(Z_1).view(-1,32,4,4))
+                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+                    Z_2 = self.W_b_1(F.relu(Z_1))
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
                 if t>=1:
                     Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4) + self.W_t_1(self.LRN(F.relu(Z_2))) + self.W_l_1(self.LRN(F.relu(Z_1))) 

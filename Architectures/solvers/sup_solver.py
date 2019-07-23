@@ -86,14 +86,27 @@ def supervised_decoder_loss(img, recon):
     return recon_loss
 
 class DataGather(object):
-    def __init__(self):
+    def __init__(self, testing_method):
+        self.testing_method = testing_method
         self.data = self.get_empty_data_dict()
+        
 
     def get_empty_data_dict(self):
-        return dict(iter=[],
-                    train_recon_loss=[],
-                    test_recon_loss =[],
-                   )
+        if self.testing_method == 'supervised_encoder':
+            return dict(iter=[],
+                        train_loss = [],
+                        test_loss = [],
+                        gnrl_loss = [],
+                        train_accuracy = [],
+                        test_accuracy = [],
+                        gnrl_accuracy = []
+                       )
+        elif self.testing_method =='supervised_decoder':
+            return dict(iter=[],
+                        train_recon_loss=[],
+                        test_recon_loss =[],
+                        gnrl_recon_loss =[],
+                       )
 
     def insert(self, **kwargs):
         for key in kwargs:
@@ -166,6 +179,7 @@ class Solver_sup(object):
         tot_size = 0
         for parameter in self.net.parameters():
             tot_size += parameter.numel()
+        self.params = tot_size
         print(tot_size ,"parameters in the network!")
         
         self.lr = args.lr
@@ -180,7 +194,7 @@ class Solver_sup(object):
         if self.testing_method == 'supervised_encoder':
              self.train_dl, self.test_dl  = return_data_sup_encoder(args)
         elif self.testing_method == 'supervised_decoder':
-            self.train_dl, self.test_dl, self.gnrl_dl , self.test_data =  return_data_sup_decoder(args)
+            self.train_dl, self.test_dl, self.gnrl_dl , self.test_data, self.gnrl_data =  return_data_sup_decoder(args)
         else:
             raise NotImplementedError    
         
@@ -206,17 +220,19 @@ class Solver_sup(object):
         #if self.viz_on:
         #    self.viz = visdom.Visdom(port=self.viz_port)
             
-        self.ckpt_dir = os.path.join(args.ckpt_dir, args.viz_name)
+        self.save_output = args.save_output
+        self.output_dir = args.output_dir 
+        if not os.path.exists(self.output_dir):
+            os.makedirs(self.output_dir, exist_ok=True)
+            
+        self.ckpt_dir = os.path.join(args.output_dir, args.viz_name)
         if not os.path.exists(self.ckpt_dir):
             os.makedirs(self.ckpt_dir, exist_ok=True)
         self.ckpt_name = args.ckpt_name
         if self.ckpt_name is not None:
             self.load_checkpoint(self.ckpt_name)
 
-        self.save_output = args.save_output
-        self.output_dir = args.output_dir 
-        if not os.path.exists(self.output_dir):
-            os.makedirs(self.output_dir, exist_ok=True)
+        
 
         self.gather_step = args.gather_step
         self.display_step = args.display_step
@@ -227,7 +243,8 @@ class Solver_sup(object):
         self.batch_size = args.batch_size
         
         
-        self.gather = DataGather()
+        self.gather = DataGather(self.testing_method)
+        
         
     def train(self):
         #self.net(train=True)
@@ -273,14 +290,22 @@ class Solver_sup(object):
             
                 if self.global_iter%self.gather_step == 0:
                     self.test_loss()
-                    self.gather.insert(iter=self.global_iter, train_loss=loss.data, 
-                                       test_loss = self.testLoss, test_accuracy = self.accuracy)
+                    self.gnrl_loss()
+                  
                     if self.testing_method =='supervised_encoder': 
-                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                            myfile.write('\n[{}] train_loss:{:.3f}, train_accuracy:{:.3f}, test_loss:{:.3f}, test_accuracy:{:.3f}'.format(self.global_iter, torch.mean(loss), train_accuracy, self.testLoss, self.test_accuracy))
+                        self.gather.insert(iter=self.global_iter, train_loss=loss.data, 
+                                       test_loss = self.testLoss,gnrl_loss = self.gnrlLoss,
+                                           train_accuracy = train_accuracy, test_accuracy = self.accuracy,
+                                          gnrl_accuracy = self.accuracy)
+                        
                     elif self.testing_method =='supervised_decoder':
+                        
+                        self.gather.insert(iter=self.global_iter, train_recon_loss = torch.mean(loss), 
+                                           test_recon_loss = self.testLoss, gnrl_recon_loss = self.gnrlLoss)
+                        
                         with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                            myfile.write('\n[{}] train_recon_loss:{:.3f}, test_recon_loss:{:.3f}'.format(self.global_iter, torch.mean(loss), self.testLoss))
+                            myfile.write('\n[{}] train_recon_loss:{:.3f}, test_recon_loss:{:.3f} , gnrl_recon_loss:{:.3f}'.format(self.global_iter, torch.mean(loss), self.testLoss, self.gnrlLoss))
+                
                 
                 if self.global_iter%self.display_step == 0:
                     if self.testing_method =='supervised_encoder': 
@@ -288,15 +313,35 @@ class Solver_sup(object):
                         print('[{}] train accuracy:{:.3f}'.format(self.global_iter, train_accuracy))
                     print('[{}] train loss:{:.3f}'.format(self.global_iter, torch.mean(loss)))
                         
+                
                 if self.global_iter%self.save_step == 0:
-                    self.save_checkpoint('last')
-                    pbar.write('Saved checkpoint(iter:{})'.format(self.global_iter))
+                    self.save_checkpoint('last') 
+                    
+                    oldtestLoss = self.testLoss
                     self.test_loss()
+                    print('old test loss', oldtestLoss,'current test loss', self.testLoss )
+                    
+                    if self.gnrl_dl != 0:
+                        oldgnrlLoss = self.gnrlLoss
+                        self.gnrl_loss()
+                        print('old gnrl loss', oldgnrlLoss,'current gnrl loss', self.gnrlLoss )
+                        if self.gnrlLoss < oldgnrlLoss:
+                            self.save_checkpoint('best_gnrl')
+                            pbar.write('Saved best GNRL checkpoint(iter:{})'.format(self.global_iter))
+                        
+                    if self.testLoss  < oldtestLoss or self.gnrlLoss < oldgnrlLoss:
+                        self.save_checkpoint('best_test')
+                        pbar.write('Saved best TEST checkpoint(iter:{})'.format(self.global_iter))
+                    
                     if self.testing_method == 'supervised_decoder':
                         self.test_images()
                     
-                if self.global_iter%500 == 0:
+                    self.gather.save_data(self.global_iter, self.output_dir, 'last' )
+                    
+                    
+                if self.global_iter%5000 == 0:
                     self.save_checkpoint(str(self.global_iter))
+                    self.gather.save_data(self.global_iter, self.output_dir, None )
 
                 if self.global_iter >= max_iter:
                     out = True
@@ -348,7 +393,7 @@ class Solver_sup(object):
                     final_out =testLoss_list[1]
                     test_accuracy += self.get_accuracy(final_out,y)
                 elif self.testing_method =='supervised_decoder':
-                    x = x.type(torch.FloatTensor)
+                    x = x.type(torch.FloatTensor).to(self.device)
                     testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     test_accuracy = 0
                 testLoss += testLoss_list[0]
@@ -360,6 +405,7 @@ class Solver_sup(object):
         print('[{}] test_Loss:{:.3f}'.format(self.global_iter, self.testLoss))
         print('[{}] test accuracy:{:.3f}'.format(self.global_iter, self.test_accuracy))
     
+       
     
     def get_accuracy(self, outputs, targets):
         assert outputs.size() == targets.size()
@@ -377,31 +423,35 @@ class Solver_sup(object):
         gnrlLoss = 0.0
         cnt = 0
         with torch.no_grad():
-            for sample in self.gnrl_data_loader:
-                img = sample['x'].to(self.device)
-                trgt = sample['y'].to(self.device)
+            for sample in self.gnrl_dl:
+                x = sample['x'].to(self.device)
+                y = sample['y'].to(self.device)
+                    
                 if self.testing_method =='supervised_encoder':
                     grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     final_out =grnlLoss_list[1]
                     gnrl_accuracy += self.get_accuracy(final_out,y)
                 elif self.testing_method =='supervised_decoder':
-                    x = x.type(torch.FloatTensor)
+                    x = x.type(torch.FloatTensor).to(self.device)
                     grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     grnl_accuracy = 0
                 gnrlLoss += grnlLoss_list[0]
                 cnt += 1
         self.gnrlLoss = gnrlLoss.div(cnt)
-        self.gnrlLoss = self.gnrlLoss.numpy()[0]
+        self.gnrlLoss = self.gnrlLoss.numpy()
         print('[{}] gnrl_Loss:{:.3f}'.format(self.global_iter, self.gnrlLoss))
+        
         
     def test_images(self):
         net_copy = deepcopy(self.net)
         net_copy.to('cpu')
         
-        print('Reconstructing Test Images!')
+        print('Reconstructing test Images!')
         with torch.no_grad():
-            plot_decoder_img(net_copy, self.test_data, self.output_dir, self.global_iter, self.sbd, type="Test", n=20 )
-        
+            plot_decoder_img(net_copy, self.test_data, self.output_dir, self.global_iter, self.sbd, type="test", n=20 )
+            print('Reconstructing gnrl Images!')
+            plot_decoder_img(net_copy, self.gnrl_data, self.output_dir, self.global_iter, self.sbd, type="gnrl", n=20 )
+
         
     
     def save_checkpoint(self, filename, silent=True):
@@ -428,7 +478,7 @@ class Solver_sup(object):
     def load_checkpoint(self, filename):
         file_path = os.path.join(self.ckpt_dir, filename)
         if os.path.isfile(file_path):
-            checkpoint = torch.load(file_path)
+            checkpoint = torch.load(file_path, map_location='cpu') ####!!!!!!!!! REMOVE FOR 
             self.global_iter = checkpoint['iter']
             self.win_recon = checkpoint['win_states']['recon']
             self.win_kld = checkpoint['win_states']['kld']
@@ -442,5 +492,8 @@ class Solver_sup(object):
             print("=> loaded checkpoint '{} (iter {})'".format(file_path, self.global_iter))
         else:
             print("=> no checkpoint found at '{}'".format(file_path))
+        file_path_2 = os.path.join(self.output_dir, filename)
+        if os.path.isfile(file_path_2):
+            self.gather.load_data(file_path_2)
 
             

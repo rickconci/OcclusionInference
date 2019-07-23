@@ -111,9 +111,9 @@ class MyDataset_decoder(Dataset):
             tot_data_size = train_data_size + test_data_size
             self.files_img = [y_paths+ 'orig_{}.png'.format(i) for i in range(train_data_size, tot_data_size)] 
         elif train_test_gnrl == 'gnrl':
-            gnrl_data_size = len(os.listdir(image_paths))
+            self.gnrl_data_size = len(os.listdir(y_paths))
             print("Sorting gnrl image files")
-            self.files_img = [y_paths+ 'orig_{}.png'.format(i) for i in range(0,gnrl_data_size)]
+            self.files_img = [y_paths+ 'orig_{}.png'.format(i) for i in range(0,self.gnrl_data_size)]
         
         inputs = one_hot_targets(x_paths,train_test_gnrl, train_data_size,test_data_size)
         
@@ -152,6 +152,9 @@ class MyDataset_decoder(Dataset):
             return self.train_data_size
         elif self.train_test_gnrl == 'test':
             return self.test_data_size
+        elif self.train_test_gnrl == 'gnrl':
+            #print(self.gnrl_data_size)
+            return self.gnrl_data_size
     
     
     
@@ -163,6 +166,10 @@ class one_hot_targets():
         self.train_data = data.iloc[:train_data_size, :]
         self.test_data = data.iloc[train_data_size:, :]
         
+        if train_test_type == 'gnrl':
+            self.gnrl_data= data
+            self.gnrl_data_size = data.shape[0]
+           
         self.train_test_type = train_test_type
         self.train_data_size = train_data_size
         self.test_data_size= test_data_size
@@ -186,15 +193,18 @@ class one_hot_targets():
             self.y_front = self.test_data.iloc[:, 23].values.astype(float)
         elif train_test_type=='gnrl':
             self.digt_list_gnrl = self.gnrl_data.iloc[:, [5,21]].values.astype(int)
-            cols_test = self.test_data.iloc[:, [12, 32]].values/255
-            self.cols_test = cols_test.astype(int)
-            self.x_back = self.test_data.iloc[:, 6].values.astype(float)
-            self.y_back= self.test_data.iloc[:, 7].values.astype(float)
-            self.x_front = self.test_data.iloc[:, 22].values.astype(float)
-            self.y_front = self.test_data.iloc[:, 23].values.astype(float)
+            cols_gnrl = self.gnrl_data.iloc[:, [12, 32]].values/255
+            self.cols_gnrl = cols_gnrl.astype(int)
+            self.x_back = self.gnrl_data.iloc[:, 6].values.astype(float)
+            self.y_back= self.gnrl_data.iloc[:, 7].values.astype(float)
+            self.x_front = self.gnrl_data.iloc[:, 22].values.astype(float)
+            self.y_front = self.gnrl_data.iloc[:, 23].values.astype(float)
        
         self.distance = np.sqrt((self.x_front - self.x_back)**2 + (self.y_front - self.y_back)**2)
-    
+        plt.hist(self.distance, bins=30)
+        plt.ylabel('Probability');
+        plt.savefig('Distances histogram.png')
+        
     def joint_targets(self):
         if self.train_test_type=='train':
             back = self.digt_list_train[:,0]
@@ -204,6 +214,10 @@ class one_hot_targets():
             back = self.digt_list_test[:,0]
             front =self.digt_list_test[:,1]
             col_back = torch.LongTensor(self.cols_test[:,0]).view(self.test_data_size, -1)
+        elif self.train_test_type =='gnrl':
+            back = self.digt_list_gnrl[:,0]
+            front =self.digt_list_gnrl[:,1]
+            col_back = torch.LongTensor(self.cols_gnrl[:,0]).view(self.gnrl_data_size, -1)
         
         n_values = np.max(back) + 1
         back_one_hot = torch.LongTensor(np.eye(n_values)[back])
@@ -227,6 +241,12 @@ class one_hot_targets():
                 new_df[i,self.cols_test[i,0]] = self.digt_list_test[i,0]
                 new_df[i,self.cols_test[i,1]] = self.digt_list_test[i,1]
             depth_black = torch.FloatTensor(self.cols_test[:,0]).view(self.test_data_size, -1)
+        elif self.train_test_type=='gnrl':
+            new_df = np.zeros((self.gnrl_data.shape[0], 2))
+            for i in range(self.gnrl_data.shape[0]):
+                new_df[i,self.cols_gnrl[i,0]] = self.digt_list_gnrl[i,0]
+                new_df[i,self.cols_gnrl[i,1]] = self.digt_list_gnrl[i,1]
+            depth_black = torch.FloatTensor(self.cols_gnrl[:,0]).view(self.gnrl_data_size, -1)
             
         black = new_df[:,0].astype(int)
         black = new_df[:,0].astype(int)
@@ -392,6 +412,7 @@ def return_data_sup_decoder(args):
     y_gnrl_paths = os.path.join(dset_dir + "gnrl/orig/")
     
     if os.path.exists(y_gnrl_paths):
+        
         dset_gnrl = MyDataset_decoder
         gnrl_kwargs = {'x_paths':x_gnrl_paths,
                        'y_paths': y_gnrl_paths,
@@ -408,7 +429,7 @@ def return_data_sup_decoder(args):
                                   pin_memory=True,
                                   drop_last=False)
     
-        gnrl_data_size = len(os.listdir(gnrl_image_paths))
+        gnrl_data_size = len(os.listdir(y_gnrl_paths))
         
         print('{} train images, {} test images {} generalisation images"'.format(
             train_data_size, test_data_size, gnrl_data_size))
@@ -419,4 +440,4 @@ def return_data_sup_decoder(args):
             train_data_size, test_data_size))
 
     
-    return train_loader, test_loader, gnrl_loader, test_data
+    return train_loader, test_loader, gnrl_loader, test_data, gnrl_data

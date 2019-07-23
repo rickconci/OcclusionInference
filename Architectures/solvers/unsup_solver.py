@@ -195,7 +195,7 @@ class Solver_unsup(object):
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir, exist_ok=True)
         
-        self.ckpt_dir = os.path.join(args.ckpt_dir, args.viz_name)
+        self.ckpt_dir = os.path.join(args.output_dir, args.viz_name)
         if not os.path.exists(self.ckpt_dir):
             os.makedirs(self.ckpt_dir, exist_ok=True)
         self.ckpt_name = args.ckpt_name
@@ -374,6 +374,7 @@ class Solver_unsup(object):
        
         print('[{}] test_Loss:{:.3f}, test_recon_loss:{:.3f}, test_KL_loss:{:.3f}'.format(
             self.global_iter, self.testLoss,self.test_recon_loss, self.test_kl_loss))
+        return self.testLoss
     
     
     def gnrl_loss(self):
