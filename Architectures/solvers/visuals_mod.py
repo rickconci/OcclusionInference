@@ -8,18 +8,26 @@ import torchvision
 import shutil
 from tqdm import tqdm
 import torch.nn as nn
+
 import sys
+
+import torch.optim as optim
+
 sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
 #sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 
 from models.BLT_models import SB_decoder, spatial_broadcast_decoder
 
+from data_loaders.dataset_sup import return_data_sup_encoder
+from models.Lin_model import Lin_model 
+
+from solvers.utils_mod import DataGather, get_accuracy
+from solvers.losses import supervised_encoder_loss
+
+
 import matplotlib.pyplot as plt
 import matplotlib.backends.backend_pdf
 plt.rcParams['figure.figsize'] = [15, 15]
-
-#from model_BLT_VAE import reparametrize_gaussian, reparametrize_bernoulli
-
 
 
 def traverse_z(NN, example_id, ID, output_dir, global_iter, sbd ,num_frames = 100 ):
@@ -258,7 +266,7 @@ def plotsave_tests(NN, test_data, pdf_path, global_iter, type, n=20, ):
     
     if type =='Test':
         pdf_path = "{}/testing_recon{}.pdf".format(pdf_path, global_iter)
-    elif type =='Grnl':
+    elif type =='Gnrl':
         pdf_path = "{}/gnrl_recon{}.pdf".format(pdf_path, global_iter)
     
     
@@ -296,10 +304,15 @@ def plotLearningCurves(solver):
     if solver.testing_method == 'unsupervised':
     
        
-        plt.figure(figsize = (8,8))
+        fig_lc = plt.figure(figsize = (8,8))
+        fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal train loss: {:.3f}, Final test loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
+                           solver.params, solver.gather.data['trainLoss'][-1],
+                           solver.gather.data['testLoss'][-1],
+                         solver.gather.data['gnrlLoss'][-1]), fontsize=14)
         plt.subplot()
-        plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
-        plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'b', linewidth=2, label = "test loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'coral', linewidth=2.5, label = "train loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'seagreen', linewidth=2, label = "test loss")
+        plt.plot(solver.gather.data['iter'], solver.gather.data['gnrlLoss'], 'dodgerblue', linewidth=2, label = "gnrl loss")
         plt.xlabel("iterations")
         plt.ylabel("loss")
         #plt.title("losses")
@@ -308,7 +321,11 @@ def plotLearningCurves(solver):
         plt.savefig('{}/Train_Test_loss_Curves.png'.format(solver.output_dir))
         plt.close()
 
-        plt.figure(figsize = (8,8))
+        fig_lc = plt.figure(figsize = (8,8))
+        fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal: test loss: {:.3f}, recon loss: {:.3f}, KL loss: {:.3f} '.format(
+                           solver.params, solver.gather.data['trainLoss'][-1],
+                           solver.gather.data['train_recon_loss'][-1],
+                         solver.gather.data['train_KL_loss'][-1]), fontsize=14)
         plt.subplot()
         plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'coral', linewidth=2.5, label = "trainLoss")
         plt.plot(solver.gather.data['iter'], solver.gather.data['train_recon_loss'], 'seagreen', linewidth=2.5, label = "train_recon_loss")
@@ -321,7 +338,11 @@ def plotLearningCurves(solver):
         plt.savefig('{}/Train_Loss_Curves.png'.format(solver.output_dir))
         plt.close()
 
-        plt.figure(figsize = (8,8))
+        fig_lc = plt.figure(figsize = (8,8))
+        fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal Test: loss: {:.3f}, recon loss: {:.3f}, KL loss: {:.3f} '.format(
+                           solver.params, solver.gather.data['testLoss'][-1],
+                           solver.gather.data['test_recon_loss'][-1],
+                         solver.gather.data['test_kl_loss'][-1]), fontsize=14)
         plt.subplot()
         plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
         plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'coral', linewidth=2.5, label = "testLoss")
@@ -336,7 +357,11 @@ def plotLearningCurves(solver):
         plt.close()
 
         if solver.gather.data['grnlLoss'] :
-            plt.figure(figsize = (8,8))
+            fig_lc = plt.figure(figsize = (8,8))
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal Gnrl: loss: {:.3f}, recon loss: {:.3f}, KL loss: {:.3f} '.format(
+                           solver.params, solver.gather.data['grnlLoss'][-1],
+                           solver.gather.data['gnrl_recon_loss'][-1],
+                         solver.gather.data['gnrl_kl_loss'][-1]), fontsize=14)
             plt.subplot()
             plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
             plt.plot(solver.gather.data['iter'], solver.gather.data['grnlLoss'], 'coral', linewidth=2.5, label = "grnlLoss")
@@ -554,3 +579,84 @@ def plotFilters(self, figIdx = None, colorLimit = 'common'):
     plt.show()
     return fig
 
+
+def linear_readout_sup(net, max_epoch):
+    
+    sup_train_dl, sup_test_dl, sup_gnrl_dl = return_data_sup_encoder(net.args)    
+    if net.encoder_target_type == 'joint':
+        z_out = 10
+    elif net.encoder_target_type == 'black_white':
+        z_out = 20
+    elif net.encoder_target_type == 'depth_black_white':
+        z_out = 21
+    elif net.encoder_target_type == 'depth_black_white_xy_xy':
+        z_out = 25
+        
+    lin_net = Lin_model((net.z_dim_bern + net.z_dim_gauss), z_out)
+    optim_2 = optim.Adam(lin_net.parameters(), lr=net.lr, betas=(net.beta1, net.beta2))    
+    
+    if torch.cuda.device_count()>1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        lin_net = nn.DataParallel(lin_net)
+    lin_net = lin_net.to(net.device) 
+        
+    iters_per_epoch = len(sup_train_dl)
+    print(iters_per_epoch, 'iters per epoch')
+    max_iter = max_epoch*iters_per_epoch
+    batch_size = sup_train_dl.batch_size
+        
+    count = 0
+    out = False
+    pbar = tqdm(total=max_iter)
+    global_iter = 0
+    pbar.update(global_iter)
+        
+    while not out:
+        for sample in sup_train_dl:
+            global_iter += 1
+            pbar.update(1)
+    
+            x = sample['x'].to(net.device)
+            y = sample['y'].to(net.device)
+                
+            with torch.no_grad():
+                output = net.net._encode(x)
+                #print(out.shape)
+                output = output[:, :z_out]
+                
+                
+                
+            final_out = lin_net(final_out)
+            loss = supervised_encoder_loss(final_out, y, net.encoder_target_type)
+                
+            l2 = 0
+            for p in net.net.parameters():
+                l2 = l2 + p.pow(2).sum() #*0.5
+            loss = loss + net.l2_loss * l2
+                
+            optim_2.zero_grad()
+            loss.backward()
+            optim_2.step()
+            
+            if global_iter%(max_iter/500 )==0:
+                print('[{}] train loss:{:.3f}'.format(global_iter, torch.mean(loss)))
+                if net.encoder_target_type== 'joint':
+                    train_accuracy = get_accuracy(final_out, y, net.encoder_target_type)
+                    print('[{}] train accuracy:{:.3f}'.format(global_iter, train_accuracy))
+                else:
+                    accuracy_list = get_accuracy(final_out,y,net.encoder_target_type)
+                    train_depth_accuracy = accuracy_list[0]
+                    train_black_accuracy = accuracy_list[1]
+                    train_white_accuracy = accuracy_list[2]
+
+                    print('[{}], train_depth_accuracy:{:.3f}, train_black_accuracy:{:.3f}, train_white_accuracy:{:.3f}'.format(global_iter, train_depth_accuracy, train_black_accuracy, train_white_accuracy))
+        
+            count +=1 
+            if global_iter >= max_iter:
+                out = True
+                break
+                    
+        pbar.write("[Training Finished]")
+        pbar.close()
+            
+        

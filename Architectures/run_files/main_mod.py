@@ -12,7 +12,7 @@ sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/Occlusion
 from solvers.unsup_solver import Solver_unsup
 from solvers.sup_solver import Solver_sup
 from solvers.utils_mod import str2bool
-from solvers.visuals_mod import plotLearningCurves
+from solvers.visuals_mod import plotLearningCurves, linear_readout_sup
 
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
@@ -39,21 +39,19 @@ def main(args):
         net.test_loss()
         net.gnrl_loss()
         if args.testing_method == 'unsupervised':
-            net.gnrl_loss()
             net.test_plots()
-            net.linear_readout_sup()
+            #linear_readout_sup(net, max_epoch = 50)
         print("plotting learning curves!")
         plotLearningCurves(net)
         
         
     elif not args.train:
         print("Testing")
-        #net.test_loss()
+        net.test_loss()
         net.gnrl_loss()
         if args.testing_method == 'unsupervised':
-            net.gnrl_loss()
             net.test_plots()
-            net.linear_readout_sup()
+            #linear_readout_sup(net, max_epoch = 10)
         print("plotting learning curves!")
         plotLearningCurves(net)
 
@@ -69,10 +67,12 @@ if __name__ == "__main__":
     parser.add_argument('--decoder', default='B', type=str, help='B, BL, BT, BLT')
     parser.add_argument('--sbd', default=False, type=str2bool, help='use spatial broacast decoder')
     parser.add_argument('--n_rep', default=4, type=int, help='iterations of recurrent processing ')
+    parser.add_argument('--n_filter', default=32, type=int, help='number of filters in convolutional layers')
+    parser.add_argument('--kernel_size', default=4, type=int, help='kernel size in convolutional layers')
+    parser.add_argument('--padding', default=1, type=int, help='padding in convolutional layers')
 
     parser.add_argument('--z_dim_bern', default= 0, type=int, help='dimension of the representation z')
     parser.add_argument('--z_dim_gauss', default= 20, type=int, help='dimension of the representation z')
-    parser.add_argument('--n_filter', default=32, type=int, help='number of filters in convolutional layers')
         
     parser.add_argument('--optim_type', default='Adam', type=str, help='type of optimiser')
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser.add_argument('--dset_dir', default='/train/', type=str, help='dataset directory')
     parser.add_argument('--dataset', default='digits_gray', type=str, help='dataset name')
     parser.add_argument('--testing_method', default='unsupervised', type=str, help='supervised vs unsupervised')
-    parser.add_argument('--encoder_target_type', default='depth_black_white', type=str, help='types of supervised encoding')
+    parser.add_argument('--encoder_target_type', default='depth_black_white_xy_xy', type=str, help='types of supervised encoding')
     parser.add_argument('--image_size', default=32, type=int, help='image size. now only (64,64) is supported')
     parser.add_argument('--num_workers', default=8, type=int, help='dataloader num_workers')
 

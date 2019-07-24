@@ -29,143 +29,10 @@ sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/Occlusion
 #sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 from data_loaders.dataset_sup import return_data_sup_encoder, return_data_sup_decoder
 from models.BLT_models import multi_VAE, SB_decoder, spatial_broadcast_decoder
+
 from solvers.visuals_mod import plot_decoder_img
-
-
-def supervised_encoder_loss(output, target, encoder_target_type):
-    batch_size = output.size(0)
-    assert batch_size != 0
-    
-    if encoder_target_type =='joint':
-        y_hat = output.float()
-        y = target.float()
-        y_hat = F.sigmoid(y_hat)
-        e = 1e-20
-        #print(y[0,:].long())
-        #print(y_hat[0,:])
-        sup_loss = (-torch.sum(y*torch.log(y_hat-e) + (1-y)*torch.log(1-y_hat+e))).div(batch_size)
-        #print(sup_loss)
-    elif encoder_target_type =='black_white':
-        assert output.size() == target.size()
-        assert output.size(1) == 20
-        output = output.float()
-        target = target.long()
-        black_out = output[:,:10]
-        white_out = output[:,10:]
-        black_target = torch.topk(target[:,:10],1,dim=1 )[1]
-        white_target = torch.topk(target[:,10:], 1,dim=1 )[1]
-        black_target = torch.squeeze(black_target)
-        white_target = torch.squeeze(white_target)
-        #zzz, idx = torch.max(F.softmax(black_out[0,:]) , 0)
-        #print( idx ,black_target[0] )
-        
-        black_loss = F.cross_entropy(black_out, black_target, size_average=False).div(
-            batch_size)
-        white_loss = F.cross_entropy(white_out, white_target, size_average=False).div(batch_size)
-        sup_loss = black_loss + white_loss
-        
-    elif encoder_target_type =='depth_black_white':
-        depth = F.sigmoid(output[:,:1])
-        black_out = output[:,1:11]
-        white_out = output[:,11:]
-        depth_target = target[:,:1]
-        black_target = torch.topk(target[:,1:11],1,dim=1 )[1].long()
-        white_target = torch.topk(target[:,11:],1,dim=1 )[1].long()
-        depth_loss = F.binary_cross_entropy(depth, depth_target,size_average=False).div(batch_size)
-        black_loss = F.cross_entropy(black, black_target, size_average=False).div(batch_size)
-        white_loss = F.cross_entropy(white, white_target, size_average=False).div(batch_size)
-        sup_loss = black_loss + white_loss + depth_loss
-    
-    elif encoder_target_type =='depth_black_white_xy_xy':
-        depth = F.sigmoid(output[:,:1])
-        black_out = output[:,1:11]
-        white_out = output[:,11:21]
-        xy_xy = output[:,21:]
-        depth_target = target[:,:1].float()
-        black_target = torch.topk(target[:,1:11],1,dim=1)[1].squeeze(1)
-        white_target = torch.topk(target[:,11:21],1,dim=1)[1].squeeze(1)
-        xy_xy_target = target[:,21:].float()
-        #print(depth[0,:],black_out[0,:], white_out[0,:], xy_xy[0,:])
-        #print(black_out.shape)
-        #print(black_target.shape)
-        
-        #print(depth_target[0,:], black_target[0], white_target[0], xy_xy_target[0,:])
-        depth_loss = F.binary_cross_entropy(depth, depth_target,size_average=False).div(batch_size)
-        black_loss = F.cross_entropy(black_out, black_target, size_average=False).div(batch_size)
-        white_loss = F.cross_entropy(white_out, white_target, size_average=False).div(batch_size)
-        xy_xy_loss = F.mse_loss(xy_xy, xy_xy_target, size_average=False).div(batch_size)
-        
-        sup_loss = black_loss + white_loss + depth_loss + xy_xy_loss
-        
-    return sup_loss
-
-def supervised_decoder_loss(img, recon):
-    #reconstruction loss for GAUSSIAN distribution of pixel values (not Bernoulli)
-    batch_size = recon.size(0)
-    assert batch_size != 0
-    recon = F.sigmoid(recon)
-    recon_loss = F.mse_loss(recon, img, size_average=False).div(batch_size) #divide mse loss by batch size
-    return recon_loss
-
-class DataGather(object):
-    def __init__(self, testing_method, encoder_target_type):
-        self.encoder_target_type = encoder_target_type
-        self.testing_method = testing_method
-        self.data = self.get_empty_data_dict()
-        
-
-    def get_empty_data_dict(self):
-        if self.testing_method == 'supervised_encoder':
-            if self.encoder_target_type== 'joint':
-                return dict(iter=[],
-                            train_loss = [],
-                            test_loss = [],
-                            gnrl_loss = [],
-                            train_accuracy = [],
-                            test_accuracy = [],
-                            gnrl_accuracy = []
-                           )
-            else:
-                return dict(iter=[],
-                            train_loss = [],
-                            test_loss = [],
-                            gnrl_loss = [],
-                            train_depth_accuracy = [],
-                            train_black_accuracy = [],
-                            train_white_accuracy = [],
-                            test_depth_accuracy = [],
-                            test_black_accuracy = [],
-                            test_white_accuracy = [],
-                            gnrl_depth_accuracy = [],
-                            gnrl_black_accuracy = [],
-                            gnrl_white_accuracy = []
-                           )
-        elif self.testing_method =='supervised_decoder':
-            return dict(iter=[],
-                        train_recon_loss=[],
-                        test_recon_loss =[],
-                        gnrl_recon_loss =[],
-                       )
-
-    def insert(self, **kwargs):
-        for key in kwargs:
-            self.data[key].append(kwargs[key])
-
-    def flush(self):
-        self.data = self.get_empty_data_dict()
-        
-    def save_data(self, glob_iter, output_dir, name ):
-        if name == 'last':
-            pickle.dump( self.data, open( "{}/data_{}.p".format(output_dir,name ), "wb" ) )
-        else:
-            pickle.dump( self.data, open( "{}/data_{}.p".format(output_dir, glob_iter ), "wb" ) )
-
-    def load_data(self, glob_iter, output_dir, name):
-        if name=='last':
-            self.data = pickle.load( open( "{}/data_{}.p".format(output_dir,name ), "rb" ) )
-        else:
-            self.data = pickle.load( open( "{}/data_{}.p".format(output_dir,glob_iter ), "rb" ) )
-            
+from solvers.utils_mod import DataGather, get_accuracy
+from solvers.losses import supervised_encoder_loss, supervised_decoder_loss
             
 class Solver_sup(object):
     def __init__(self, args):
@@ -176,9 +43,9 @@ class Solver_sup(object):
         self.decoder = args.decoder
         self.n_filter = args.n_filter
         self.n_rep = args.n_rep
+        self.kernel_size = args.kernel_size
+        self.padding = args.padding
         self.sbd = args.sbd
-        
-       
         
         self.encoder_target_type = args.encoder_target_type
                 
@@ -199,13 +66,32 @@ class Solver_sup(object):
         else:
             raise NotImplementedError
         
-        net = multi_VAE(self.encoder,self.decoder,self.z_dim, 0 ,self.n_filter,self.nc,self.n_rep,self.sbd)
+        net = multi_VAE(self.encoder,self.decoder,self.z_dim, 0 ,self.n_filter,self.nc,
+                        self.n_rep,self.sbd, self.kernel_size, self.padding)
         
         
         if self.sbd == True:
             self.decoder = SB_decoder(self.z_dim, 0, self.n_filter, self.nc)
             self.sbd_model = spatial_broadcast_decoder()
             
+        
+        #print parameters in model
+        encoder_size = 0
+        decoder_size = 0
+        for name, param in net.named_parameters():
+            if param.requires_grad:
+                if 'encoder' in name:
+                    encoder_size += param.numel()
+                elif 'decoder' in name:
+                    decoder_size += param.numel()
+        tot_size = encoder_size + decoder_size
+        if self.testing_method =='supervised_encoder':
+            print(encoder_size ,"parameters in the encoder!")
+            self.params = encoder_size
+        elif self.testing_method =='supervised_decoder':
+            print(decoder_size ,"parameters in the decoder!")
+            self.params = encoder_size
+        
         print("CUDA availability: " + str(torch.cuda.is_available()))
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         if torch.cuda.device_count()>1:
@@ -214,12 +100,6 @@ class Solver_sup(object):
             
         self.net = net.to(self.device) 
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
-        #print parameters in model
-        tot_size = 0
-        for parameter in self.net.parameters():
-            tot_size += parameter.numel()
-        self.params = tot_size
-        print(tot_size ,"parameters in the network!")
         
         self.lr = args.lr
         self.l2_loss = args.l2_loss
@@ -237,8 +117,6 @@ class Solver_sup(object):
         else:
             raise NotImplementedError    
         
-        
-            
         self.max_epoch = args.max_epoch
         self.global_iter = 0
         self.max_epoch = args.max_epoch
@@ -288,7 +166,7 @@ class Solver_sup(object):
     def train(self):
         #self.net(train=True)
         iters_per_epoch = len(self.train_dl)
-        print(iters_per_epoch)
+        print(iters_per_epoch, 'iters per epoch')
         max_iter = self.max_epoch*iters_per_epoch
         batch_size = self.train_dl.batch_size
         
@@ -338,7 +216,7 @@ class Solver_sup(object):
                                                train_accuracy = train_accuracy, test_accuracy = self.test_accuracy,
                                               gnrl_accuracy = self.accuracy)
                         else:
-                            accuracy_list = self.get_accuracy(final_out,y)
+                            accuracy_list = self.get_accuracy(final_out,y, self.encoder_target_type)
                             train_depth_accuracy = accuracy_list[0]
                             train_black_accuracy = accuracy_list[1]
                             train_white_accuracy = accuracy_list[2]
@@ -369,10 +247,10 @@ class Solver_sup(object):
                     print('[{}] train loss:{:.3f}'.format(self.global_iter, torch.mean(loss)))
                     if self.testing_method =='supervised_encoder': 
                         if self.encoder_target_type== 'joint':
-                            train_accuracy = self.get_accuracy(final_out, y)
+                            train_accuracy = self.get_accuracy(final_out, y, self.encoder_target_type)
                             print('[{}] train accuracy:{:.3f}'.format(self.global_iter, train_accuracy))
                         else:
-                            accuracy_list = self.get_accuracy(final_out,y)
+                            accuracy_list = self.get_accuracy(final_out,y,self.encoder_target_type)
                             train_depth_accuracy = accuracy_list[0]
                             train_black_accuracy = accuracy_list[1]
                             train_white_accuracy = accuracy_list[2]
@@ -446,34 +324,7 @@ class Solver_sup(object):
                 l2 = l2 + p.pow(2).sum() #*0.5
             loss = loss + l2_loss * l2
             return([loss, recon])
-     
-     
-    def get_accuracy(self, outputs, targets):
-        assert outputs.size() == targets.size()
-        assert outputs.size(0) > 0
-        batch_size = outputs.size(0)
-        if self.encoder_target_type== 'joint':
-            x = torch.topk(outputs,2,dim=1 )[1]
-            y = torch.topk(targets,2,dim=1 )[1]
-            outputs = x[1]
-            targets  = y[1]
-            accuracy = torch.sum(outputs == targets)/outputs.size *100
-            return(accuracy)
-        else:
-            depth = F.sigmoid(outputs[:,0]).detach().round()
-            depth_accuracy = torch.sum(depth == targets[:,0]).float()/batch_size *100
-            black = torch.topk(outputs[:,1:11],1,dim=1 )[1]
-            black_targets = torch.topk(targets[:,1:11],1,dim=1 )[1]
-            black_accuracy = torch.sum(black == black_targets).float()/batch_size *100
-            white = torch.topk(outputs[:,11:21],1,dim=1 )[1]
-            white_targets = torch.topk(targets[:,11:21],1,dim=1 )[1]
-            white_accuracy = torch.sum(white == white_targets).float()/batch_size *100
-            depth_accuracy = depth_accuracy.cpu().numpy()
-            black_accuracy = black_accuracy.cpu().numpy()
-            white_accuracy = white_accuracy.cpu().numpy()
-            return [depth_accuracy, black_accuracy, white_accuracy]
        
-    
     def test_loss(self):
         print("Calculating test loss")
         testLoss = 0.0
@@ -492,9 +343,9 @@ class Solver_sup(object):
                     testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     final_out =testLoss_list[1]
                     if self.encoder_target_type== 'joint':
-                        test_accuracy += self.get_accuracy(final_out,y)
+                        test_accuracy += self.get_accuracy(final_out,y,self.encoder_target_type)
                     else:
-                        accuracy_list = self.get_accuracy(final_out,y)
+                        accuracy_list = self.get_accuracy(final_out,y,self.encoder_target_type)
                         depth_accuracy += accuracy_list[0]
                         black_accuracy += accuracy_list[1]
                         white_accuracy += accuracy_list[2]
@@ -538,9 +389,9 @@ class Solver_sup(object):
                     grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     final_out =grnlLoss_list[1]
                     if self.encoder_target_type== 'joint':
-                        test_accuracy += self.get_accuracy(final_out,y)
+                        test_accuracy += self.get_accuracy(final_out,y,self.encoder_target_type)
                     else:
-                        accuracy_list = self.get_accuracy(final_out,y)
+                        accuracy_list = self.get_accuracy(final_out,y,self.encoder_target_type)
                         depth_accuracy += accuracy_list[0]
                         black_accuracy += accuracy_list[1]
                         white_accuracy += accuracy_list[2]
@@ -563,10 +414,7 @@ class Solver_sup(object):
             self.gnrl_white_accuracy = white_accuracy/cnt
             print('[{}] gnrl_depth_accuracy:{:.3f}, gnrl_black_accuracy:{:.3f}, gnrl_white_accuracy:{:.3f}'.format(self.global_iter, self.gnrl_depth_accuracy, self.gnrl_black_accuracy,self.gnrl_white_accuracy))
             
-        
-        
-        
-        
+
     def test_images(self):
         net_copy = deepcopy(self.net)
         net_copy.to('cpu')

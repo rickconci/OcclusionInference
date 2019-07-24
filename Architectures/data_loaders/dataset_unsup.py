@@ -99,6 +99,11 @@ def return_data_unsupervised(args):
     train_data_size = len(os.listdir(train_image_paths))
     test_data_size = len(os.listdir(test_image_paths))
     
+    train_data_size = 0
+    for file in os.listdir(train_image_paths):
+        if file.endswith(".png"):
+            train_data_size +=1
+    
     dset_train = MyDataset_unsup
     train_kwargs = {'image_paths':train_image_paths,
                     'target_paths': train_target_paths,

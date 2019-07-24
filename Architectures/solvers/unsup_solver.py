@@ -29,91 +29,16 @@ sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/Occlusion
 #sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 
 from data_loaders.dataset_unsup import return_data_unsupervised
-#from data_loaders.dataset_sup import return_data_sup_encoder
 from models.BLT_models import multi_VAE, SB_decoder, spatial_broadcast_decoder
-from models.Lin_model import Lin_model 
 
-from solvers.visuals_mod import traverse_z,construct_z_hist,  plotsave_tests
-
-
-
-def reconstruction_loss(x, x_recon):
-    #reconstruction loss for GAUSSIAN distribution of pixel values (not Bernoulli)
-    batch_size = x.size(0)
-    assert batch_size != 0
-    
-    x_recon = F.sigmoid(x_recon)
-    recon_loss = F.mse_loss(x_recon, x, size_average=False).div(batch_size) #divide mse loss by batch size
-    return recon_loss
-
-
-def kl_divergence_gaussian(mu, logvar):
-    batch_size = mu.size(0)
-    assert batch_size != 0
-    if mu.data.ndimension() == 4:
-        mu = mu.view(mu.size(0), mu.size(1))
-    if logvar.data.ndimension() == 4:
-        logvar = logvar.view(logvar.size(0), logvar.size(1))
-
-    klds = -0.5*(1 + logvar - mu.pow(2) - logvar.exp())
-    total_kld = klds.sum(1).mean(0, True)
-    dimension_wise_kld = klds.mean(0)
-    mean_kld = klds.mean(1).mean(0, True)
-
-    return total_kld, dimension_wise_kld, mean_kld
-
-
-def kl_divergence_bernoulli(p):
-    batch_size = p.size(0)
-    assert batch_size != 0
-    if p.data.ndimension() == 4:
-        p = p.view(p.size(0), p.size(1))
-    
-    prior= torch.tensor(0.5)
-    klds = torch.mul(p, torch.log(p + 1e-20) - torch.log(prior)) + torch.mul(
-        1 - p, torch.log(1 - p + 1e-20) - torch.log(1 - prior))    
-    total_kld = klds.sum(1).mean(0, True)
-    dimension_wise_kld = klds.mean(0)
-    mean_kld = klds.mean(1).mean(0, True)
-    
-    return total_kld, dimension_wise_kld, mean_kld
-
-class DataGather(object):
-    def __init__(self):
-        self.data = self.get_empty_data_dict()
-
-    def get_empty_data_dict(self):
-        return dict(iter=[],
-                    trainLoss = [],
-                    train_recon_loss=[],
-                    train_KL_loss=[],
-                    testLoss=[],
-                    test_recon_loss=[],
-                    test_kl_loss=[],
-                    grnlLoss=[],
-                    gnrl_recon_loss=[],
-                   gnrl_kl_loss=[])
-
-    def insert(self, **kwargs):
-        for key in kwargs:
-            self.data[key].append(kwargs[key])
-
-    def flush(self):
-        self.data = self.get_empty_data_dict()
-        
-    def save_data(self, glob_iter, output_dir, name ):
-        if name == 'last':
-            pickle.dump( self.data, open( "{}/data_{}.p".format(output_dir,name ), "wb" ) )
-        else:
-            pickle.dump( self.data, open( "{}/data_{}.p".format(output_dir, glob_iter ), "wb" ) )
-
-    def load_data(self, filename):
-        self.data = pickle.load( open( filename), "rb" ) 
-            
+from solvers.visuals_mod import traverse_z,construct_z_hist, plotsave_tests
+from solvers.losses import reconstruction_loss, kl_divergence_gaussian, kl_divergence_bernoulli
+from solvers.utils_mod import DataGather            
 
 class Solver_unsup(object):
     def __init__(self, args):
         self.use_cuda = args.cuda and torch.cuda.is_available()
+        self.args = args
         
         self.encoder = args.encoder
         self.decoder = args.decoder
@@ -122,6 +47,8 @@ class Solver_unsup(object):
         
         self.n_filter = args.n_filter
         self.n_rep = args.n_rep
+        self.kernel_size = args.kernel_size
+        self.padding = args.padding
         self.sbd = args.sbd
         
         if args.dataset.lower() == 'digits_gray':
@@ -131,7 +58,24 @@ class Solver_unsup(object):
         else:
             raise NotImplementedError
         
-        net = multi_VAE(self.encoder,self.decoder,self.z_dim_bern,self.z_dim_gauss,self.n_filter,self.nc,self.n_rep,self.sbd)
+        net = multi_VAE(self.encoder,self.decoder,self.z_dim_bern,self.z_dim_gauss,self.n_filter,self.nc,
+                        self.n_rep,self.sbd, self.kernel_size, self.padding)
+        
+        
+        #print parameters in model
+        encoder_size = 0
+        decoder_size = 0
+        for name, param in net.named_parameters():
+            if param.requires_grad:
+                if 'encoder' in name:
+                    encoder_size += param.numel()
+                elif 'decoder' in name:
+                    decoder_size += param.numel()
+        tot_size = encoder_size + decoder_size
+        print(tot_size ,"parameters in the network!", 
+              encoder_size, " in the encoder",
+             decoder_size, "in the decoder")
+        self.params = tot_size
         
         print("CUDA availability: " + str(torch.cuda.is_available()))
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -141,11 +85,6 @@ class Solver_unsup(object):
             
         self.net = net.to(self.device) 
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
-        #print parameters in model
-        tot_size = 0
-        for parameter in self.net.parameters():
-            tot_size += parameter.numel()
-        print(tot_size ,"parameters in the network!")
         
         self.lr = args.lr
         self.beta1 = args.beta1
@@ -156,7 +95,7 @@ class Solver_unsup(object):
             self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
    
         self.train_dl, self.test_dl, self.gnrl_dl, self.test_data, self.gnrl_data = return_data_unsupervised(args)
-        #self.sup_train_dl, self.sup_test_dl = return_data_sup_encoder(args)    
+        #
         
         self.max_epoch = args.max_epoch
         self.global_iter = 0
@@ -178,7 +117,8 @@ class Solver_unsup(object):
             print(self.flip_idx[0:20])
             print(len(self.flip_idx), " flipped images!")
         
-        self.gather = DataGather()
+        self.testing_method = args.testing_method
+        self.gather = DataGather(self.testing_method, self.encoder_target_type)
         
         self.viz_name = args.viz_name
         self.viz_port = args.viz_port
@@ -206,7 +146,7 @@ class Solver_unsup(object):
     def train(self):
         #self.net(train=True)
         iters_per_epoch = len(self.train_dl)
-        print(iters_per_epoch)
+        print(iters_per_epoch, 'iters per epoch')
         max_iter = self.max_epoch*iters_per_epoch
         batch_size = self.train_dl.batch_size
         current_idxs  = 0
@@ -496,72 +436,6 @@ class Solver_unsup(object):
         if os.path.isfile(file_path_2):
             self.gather.load_data(file_path_2)
        
-    def linear_readout_sup(self, max_epoch):
-        
-        if self.encoder_target_type == 'joint':
-            z_out = 10
-        elif self.encoder_target_type == 'black_white':
-            z_out = 20
-        elif self.encoder_target_type == 'depth_black_white':
-            z_out = 22
-        
-        lin_net = Lin_model(self.z_dim, z_out)
-        optim_2 = optim.Adam(lin_net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
-        
-        if torch.cuda.device_count()>1:
-            print("Let's use", torch.cuda.device_count(), "GPUs!")
-            lin_net = nn.DataParallel(lin_net)
-        lin_net = lin_net.to(self.device) 
-        
-        iters_per_epoch = len(self.sup_train_dl)
-        print(iters_per_epoch)
-        max_iter = max_epoch*iters_per_epoch
-        batch_size = self.sup_train_dl.batch_size
-        
-        count = 0
-        out = False
-        pbar = tqdm(total=max_iter)
-        self.global_iter = 0
-        pbar.update(self.global_iter)
-        
-        while not out:
-            for sample in self.sup_train_dl:
-                self.global_iter += 1
-                pbar.update(1)
-    
-                x = sample['x'].to(self.device)
-                y = sample['y'].to(self.device)
-                
-                with torch.no_grad():
-                    final_out = self.net._encode(x)
-                
-                z_out = lin_net(final_out)
-                loss = supervised_encoder_loss(z_out, y, self.encoder_target_type)
-                
-                l2 = 0
-                for p in self.net.parameters():
-                    l2 = l2 + p.pow(2).sum() #*0.5
-                loss = loss + self.l2_loss * l2
-                
-                optim_2.zero_grad()
-                loss.backward()
-                optim_2.step()
-        
-                count +=1 
-                if self.global_iter >= max_iter:
-                    out = True
-                    break
-                    
-            pbar.write("[Training Finished]")
-            pbar.close()
+  
 
-    def get_accuracy(self, outputs, targets):
-        assert outputs.size() == targets.size()
-        assert outputs.size(0) > 0
-        x = torch.topk(outputs,2,dim=1 )
-        y = torch.topk(targets,2,dim=1 )
-        outputs = x[1].cpu().numpy()
-        targets  = y[1].cpu().numpy()
-
-        accuracy = np.sum(outputs == targets)/outputs.size *100
-        return(accuracy)
+  

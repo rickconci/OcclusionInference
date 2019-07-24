@@ -22,21 +22,24 @@ def reparametrize_bernoulli(p_dist):
 
 
 class multi_encoder(nn.Module):
-    def __init__(self, encoder, z_dim_bern, z_dim_gauss, n_filter, nc, n_rep):
+    def __init__(self, encoder_type, z_dim_bern, z_dim_gauss, n_filter, nc, n_rep, k, p):
         super (multi_encoder, self).__init__()
-        self.encoder = encoder
+        self.encoder_type = encoder_type
         self.n_rep = n_rep
         
-        self.W_b_1 = nn.Conv2d(nc, n_filter, kernel_size= 4, stride = 2, padding = 1, bias=True)   # bs 32 16 16
-        self.W_l_1 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
-        self.W_t_1 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=False )
         
-        self.W_b_2 = nn.Conv2d(n_filter, n_filter, kernel_size= 4, stride = 2, padding = 1, bias=True) # bs 32 8 8
-        self.W_l_2 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
-        self.W_t_2 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=False )
+        self.W_b_1 = nn.Conv2d(nc, n_filter, kernel_size= k, stride = 2, padding = p, bias=True)   # bs 32 16 16
+        self.W_b_2 = nn.Conv2d(n_filter, n_filter, kernel_size= k, stride = 2, padding = p, bias=True)
+        self.W_b_3 = nn.Conv2d(n_filter, n_filter, kernel_size= k, stride = 2, padding = p, bias=True)
         
-        self.W_b_3 = nn.Conv2d(n_filter, n_filter, kernel_size= 4, stride = 2, padding = 1, bias=True) # bs 32 4 4
-        self.W_l_3 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
+        if encoder_type == 'BL' or encoder_type == 'BLT':
+            self.W_l_1 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
+            self.W_l_2 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
+            self.W_l_3 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
+        if encoder_type == 'BT' or encoder_type == 'BLT':
+            self.W_t_1 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=False )
+            self.W_t_2 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=False )
+        
         
         self.Lin_1 = nn.Linear(32*4*4, 256, bias=True)
         self.Lin_2 = nn.Linear(256, 256, bias=True)
@@ -53,11 +56,11 @@ class multi_encoder(nn.Module):
                     block.bias.data.fill_(0)
     
     def forward(self, x):
-        if self.encoder == 'B':
+        if self.encoder_type == 'B':
             Z_1 = self.W_b_1(x)
             Z_2 = self.W_b_2(self.LRN(F.relu(Z_1)))
             Z_3 = self.W_b_3(self.LRN(F.relu(Z_2)))  
-        elif self.encoder == 'BL':
+        elif self.encoder_type == 'BL':
             for t in range(self.n_rep):
                 if t <1:
                     Z_1 = self.W_b_1(x)
@@ -67,7 +70,7 @@ class multi_encoder(nn.Module):
                     Z_1 = self.W_b_1(x) + self.W_l_1(self.LRN(F.relu(Z_1)))
                     Z_2 = self.W_b_2(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) 
                     Z_3 = self.W_b_3(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3))) 
-        elif self.encoder == 'BT':
+        elif self.encoder_type == 'BT':
             for t in range(self.n_rep):
                 if t <1:
                     Z_1 = self.W_b_1(x)
@@ -77,7 +80,7 @@ class multi_encoder(nn.Module):
                     Z_1 = self.W_b_1(x) + self.W_t_1(self.LRN(F.relu(Z_2))) 
                     Z_2 = self.W_b_2(self.LRN(F.relu(Z_1))) + self.W_t_2(self.LRN(F.relu(Z_3))) 
                     Z_3 = self.W_b_3(self.LRN(F.relu(Z_2)))
-        elif self.encoder == 'BLT':
+        elif self.encoder_type == 'BLT':
             for t in range(self.n_rep):
                 if t <1:
                     Z_1 = self.W_b_1(x)
@@ -101,25 +104,27 @@ class multi_encoder(nn.Module):
 
     
 class multi_decoder(nn.Module):
-    def __init__(self, decoder, z_dim_bern, z_dim_gauss, n_filter, nc, n_rep):
+    def __init__(self, decoder_type, z_dim_bern, z_dim_gauss, n_filter, nc, n_rep, k, p):
         super (multi_decoder, self).__init__()    
-        self.decoder = decoder
+        self.decoder_type = decoder_type
         self.n_rep = n_rep
         
         self.Lin_1 = nn.Linear( z_dim_bern + z_dim_gauss, 256, bias=True)
         self.Lin_2 = nn.Linear(256, 256, bias=True) 
         self.Lin_3 = nn.Linear(256, 32*4*4, bias=True)
         
-        self.W_b_1 = nn.ConvTranspose2d(32, 32, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=True )
-        self.W_l_1 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
-        self.W_t_1 = nn.Conv2d(32, 32, kernel_size= 4, stride = 2, padding = 1, bias=False)   
+        self.W_b_1 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=k, stride=2, padding=p, bias=True )
+        self.W_b_2 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=k, stride=2, padding=p, bias=True )
+        self.W_b_3 = nn.ConvTranspose2d(n_filter, nc, kernel_size=k, stride=2, padding=p, bias=True ) 
         
-        self.W_b_2 = nn.ConvTranspose2d(32, 32, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=True )
-        self.W_l_2 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
-        self.W_t_2 = nn.Conv2d(32, 32, kernel_size= 4, stride = 2, padding = 1, bias=False) 
-        
-        self.W_b_3 = nn.ConvTranspose2d(32, nc, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=True ) 
-        self.W_l_3 = nn.Conv2d(32, 32,kernel_size= 3, stride = 1, padding = 1, bias=False)
+        if decoder_type == 'BL' or decoder_type == 'BLT':
+            self.W_l_1 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
+            self.W_l_2 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
+            self.W_l_3 = nn.Conv2d(n_filter, n_filter,kernel_size= 3, stride = 1, padding = 1, bias=False)
+        if decoder_type == 'BT' or decoder_type == 'BLT':
+            self.W_t_1 = nn.Conv2d(n_filter, n_filter, kernel_size= 4, stride = 2, padding = 1, bias=False)
+            self.W_t_2 = nn.Conv2d(n_filter, n_filter, kernel_size= 4, stride = 2, padding = 1, bias=False) 
+            
                 
         self.LRN = nn.LocalResponseNorm(size=5, alpha=10e-4, beta=0.5, k=1.)
       
@@ -135,34 +140,36 @@ class multi_decoder(nn.Module):
             
                     
     def forward(self, z):
-        if self.decoder == 'B':
-            Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z)))))
-            Z_2 = self.W_b_1(F.relu(Z_1).view(-1,32,4,4))
+        if self.decoder_type == 'B':
+            Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+            Z_2 = self.W_b_1(F.relu(Z_1))
             Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
              
-        elif self.decoder == 'BL':
+        elif self.decoder_type == 'BL':
+            
             for t in range(self.n_rep):
                 if t <1:
-                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z)))))
-                    Z_2 = self.W_b_1(F.relu(Z_1).view(-1,32,4,4))
+                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+                    Z_2 = self.W_b_1(F.relu(Z_1))
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
                 if t>=1:
+                    print("BAA!")
                     Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4) + self.W_l_1(self.LRN(F.relu(Z_1))) 
                     Z_2 = self.W_b_1(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) 
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3)))
             
-        elif self.decoder =='BT':
+        elif self.decoder_type =='BT':
             for t in range(self.n_rep):
                 if t <1:
-                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z)))))
-                    Z_2 = self.W_b_1(F.relu(Z_1).view(-1,32,4,4))
+                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+                    Z_2 = self.W_b_1(F.relu(Z_1))
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
                 if t>=1:
                     Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4) + self.W_t_1(self.LRN(F.relu(Z_2))) 
                     Z_2 = self.W_b_1(self.LRN(F.relu(Z_1))) +  self.W_t_2(self.LRN(F.relu(Z_3))) 
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2))) 
             
-        elif self.decoder == 'BLT':
+        elif self.decoder_type == 'BLT':
             for t in range(self.n_rep):
                 if t <1:
                     Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
@@ -180,10 +187,10 @@ class multi_decoder(nn.Module):
         
         
 class multi_VAE(nn.Module):
-    def __init__(self, encoder, decoder, z_dim_bern, z_dim_gauss, n_filter, nc, n_rep, sbd):
+    def __init__(self, encoder_type, decoder_type, z_dim_bern, z_dim_gauss, n_filter, nc, n_rep, sbd, k, p):
         super (multi_VAE, self).__init__()
-        self.encoder = encoder
-        self.decoder = decoder
+        self.encoder_type = encoder_type
+        self.decoder_type = decoder_type
         self.z_dim_bern = z_dim_bern
         self.z_dim_gauss = z_dim_gauss
         self.z_dim_tot = z_dim_bern + z_dim_gauss
@@ -191,14 +198,14 @@ class multi_VAE(nn.Module):
         self.n_filter = n_filter
         self.sbd = sbd
         
-        self.encoder = multi_encoder(encoder,z_dim_bern, z_dim_gauss, n_filter, nc, n_rep)
+        self.encoder = multi_encoder(encoder_type,z_dim_bern, z_dim_gauss, n_filter, nc, n_rep, k, p)
         if sbd == True:
             self.decoder = SB_decoder(z_dim_bern, z_dim_gauss, n_filter, nc)
             self.sbd_model = spatial_broadcast_decoder()
-            print('using {} encoder SBD decoder'.format(encoder))
+            print('using {} encoder SBD decoder'.format(encoder_type))
         else:
-            self.decoder = multi_decoder(encoder,z_dim_bern, z_dim_gauss, n_filter, nc, n_rep)
-            print('using {} encoder {} decoder'.format(encoder, decoder))
+            self.decoder = multi_decoder(decoder_type,z_dim_bern, z_dim_gauss, n_filter, nc, n_rep, k, p)
+            print('using {} encoder {} decoder'.format(encoder_type, decoder_type))
 
     def forward(self, x, current_flip_idx_norm=None, train=True ):
         if train==True:
