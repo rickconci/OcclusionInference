@@ -210,19 +210,21 @@ class Solver_unsup(object):
                     if self.gnrl_dl != 0:
                         self.gnrl_loss()
                         with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                            myfile.write('\n[{}] train_loss:{:.3f},  train_recon_loss:{:.3f}, train_KL_loss:{:.3f}, test_loss:{:.3f}, test_recon_loss:{:.3f} , test_KL_loss:{:.3f}, gnrl_loss:{:.3f}, gnrl_recon_loss:{:.3f}, gnrl_KL_loss:{:.3f}'.format(self.global_iter, float(loss.data), float(recon_loss.data), float(KL_loss.data), self.testLoss, self.test_recon_loss, self.test_kl_loss, self.grnlLoss, self.gnrl_recon_loss, self.gnrl_kl_loss))
+                            myfile.write('\n[{}] train_loss:{:.3f},  train_recon_loss:{:.3f}, train_KL_loss:{:.3f}, test_loss:{:.3f}, test_recon_loss:{:.3f} , test_KL_loss:{:.3f}, gnrl_loss:{:.3f}, gnrl_recon_loss:{:.3f}, gnrl_KL_loss:{:.3f}'.format(self.global_iter, float(loss.data), float(recon_loss.data), float(KL_loss.data), self.testLoss, self.test_recon_loss, self.test_kl_loss, self.gnrlLoss, self.gnrl_recon_loss, self.gnrl_kl_loss))
                             
-                        self.gather.insert(iter=self.global_iter, trainLoss = loss.data, 
-                                           train_recon_loss=recon_loss.data, train_KL_loss =KL_loss.data,
-                                           testLoss = self.testLoss, test_recon_loss =self.test_recon_loss,
-                                          test_kl_loss = self.test_kl_loss, grnlLoss = self.grnlLoss,
-                                           gnrl_recon_loss =  self.gnrl_recon_loss,gnrl_kl_loss = self.gnrl_kl_loss  )
+                        
+                        self.gather.insert(iter=self.global_iter, trainLoss = float(loss.data), 
+                                           train_recon_loss=float(recon_loss.data), train_KL_loss =
+                                           float(KL_loss.data),testLoss = self.testLoss, test_recon_loss
+                                           = self.test_recon_loss, test_kl_loss = self.test_kl_loss, gnrlLoss =
+                                           self.gnrlLoss, gnrl_recon_loss =  self.gnrl_recon_loss,gnrl_kl_loss =
+                                           self.gnrl_kl_loss  )
                     else:
                         with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
                             myfile.write('\n[{}] train_loss:{:.3f},  train_recon_loss:{:.3f}, train_KL_loss:{:.3f}, test_loss:{:.3f}, test_recon_loss:{:.3f} , test_KL_loss:{:.3f}'.format(self.global_iter, float(loss.data), float(recon_loss.data), float(KL_loss.data), self.testLoss, self.test_recon_loss, self.test_kl_loss,))
                              
-                        self.gather.insert(iter=self.global_iter, trainLoss = loss.data, 
-                                    train_recon_loss=recon_loss.data, train_KL_loss =KL_loss.data,
+                        self.gather.insert(iter=self.global_iter, trainLoss = loss.data.cpu().numpy(), 
+                                    train_recon_loss=recon_loss.data.cpu().numpy(), train_KL_loss =KL_loss.data.cpu().numpy(),
                                     testLoss = self.testLoss, test_recon_loss =self.test_recon_loss,
                                         test_kl_loss = self.test_kl_loss )
                 
@@ -331,16 +333,16 @@ class Solver_unsup(object):
                 recon_loss += gnrlLoss_list[0]
                 kl_loss += gnrlLoss_list[1]
                 cnt += 1
-        grnlLoss = recon_loss + kl_loss
-        grnlLoss = grnlLoss.div(cnt)
-        self.grnlLoss = float(grnlLoss.cpu().numpy())  #[0]
+        gnrlLoss = recon_loss + kl_loss
+        gnrlLoss = gnrlLoss.div(cnt)
+        self.gnrlLoss = float(gnrlLoss.cpu().numpy())  #[0]
         recon_loss = recon_loss.div(cnt)
         self.gnrl_recon_loss = float(recon_loss.cpu().numpy()) #[0]
         kl_loss = kl_loss.div(cnt)
         self.gnrl_kl_loss = float(kl_loss.cpu().numpy()) #[0]
         
         print('[{}] gnrl_Loss:{:.3f} gnrl_recon_loss:{:.3f} gnrl_KL_loss:{:.3f}'.format(
-            self.global_iter, self.grnlLoss, self.gnrl_recon_loss, self.gnrl_kl_loss))
+            self.global_iter, self.gnrlLoss, self.gnrl_recon_loss, self.gnrl_kl_loss))
         
     def test_plots(self):
         #self.net.eval()   but supposed to add when testing?

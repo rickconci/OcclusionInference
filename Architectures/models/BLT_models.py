@@ -26,6 +26,7 @@ class multi_encoder(nn.Module):
         super (multi_encoder, self).__init__()
         self.encoder_type = encoder_type
         self.n_rep = n_rep
+        self.n_filt = n_filter
         
         
         self.W_b_1 = nn.Conv2d(nc, n_filter, kernel_size= k, stride = 2, padding = p, bias=True)   # bs 32 16 16
@@ -41,7 +42,7 @@ class multi_encoder(nn.Module):
             self.W_t_2 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=4, stride=2, padding=1, output_padding=0 ,bias=False )
         
         
-        self.Lin_1 = nn.Linear(32*4*4, 256, bias=True)
+        self.Lin_1 = nn.Linear(n_filter*4*4, 256, bias=True)
         self.Lin_2 = nn.Linear(256, 256, bias=True)
         self.Lin_3 = nn.Linear(256, (z_dim_bern+2*z_dim_gauss), bias=True)
         
@@ -92,7 +93,7 @@ class multi_encoder(nn.Module):
                     Z_3 = self.W_b_3(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3))) 
             
         
-        read_z = self.Lin_1(self.LRN(F.relu(Z_3)).view(-1, 32*4*4 ))
+        read_z = self.Lin_1(self.LRN(F.relu(Z_3)).view(-1, self.n_filt*4*4 ))
         read_z_2 = self.Lin_2(F.relu(read_z))
         final_z = self.Lin_3(F.relu(read_z_2))
            
@@ -108,10 +109,11 @@ class multi_decoder(nn.Module):
         super (multi_decoder, self).__init__()    
         self.decoder_type = decoder_type
         self.n_rep = n_rep
+        self.n_filter = n_filter
         
         self.Lin_1 = nn.Linear( z_dim_bern + z_dim_gauss, 256, bias=True)
         self.Lin_2 = nn.Linear(256, 256, bias=True) 
-        self.Lin_3 = nn.Linear(256, 32*4*4, bias=True)
+        self.Lin_3 = nn.Linear(256, n_filter*4*4, bias=True)
         
         self.W_b_1 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=k, stride=2, padding=p, bias=True )
         self.W_b_2 = nn.ConvTranspose2d(n_filter, n_filter, kernel_size=k, stride=2, padding=p, bias=True )
@@ -140,8 +142,10 @@ class multi_decoder(nn.Module):
             
                     
     def forward(self, z):
+        #final_img_list = []
+        
         if self.decoder_type == 'B':
-            Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+            Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,self.n_filter,4,4)
             Z_2 = self.W_b_1(F.relu(Z_1))
             Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
              
@@ -149,40 +153,40 @@ class multi_decoder(nn.Module):
             
             for t in range(self.n_rep):
                 if t <1:
-                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,self.n_filter,4,4)
                     Z_2 = self.W_b_1(F.relu(Z_1))
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
                 if t>=1:
-                    print("BAA!")
-                    Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4) + self.W_l_1(self.LRN(F.relu(Z_1))) 
+                    Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,self.n_filter,4,4) + self.W_l_1(self.LRN(F.relu(Z_1))) 
                     Z_2 = self.W_b_1(self.LRN(F.relu(Z_1))) + self.W_l_2(self.LRN(F.relu(Z_2))) 
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3)))
             
         elif self.decoder_type =='BT':
             for t in range(self.n_rep):
                 if t <1:
-                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,self.n_filter,4,4)
                     Z_2 = self.W_b_1(F.relu(Z_1))
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
                 if t>=1:
-                    Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4) + self.W_t_1(self.LRN(F.relu(Z_2))) 
+                    Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,self.n_filter,4,4) + self.W_t_1(self.LRN(F.relu(Z_2))) 
                     Z_2 = self.W_b_1(self.LRN(F.relu(Z_1))) +  self.W_t_2(self.LRN(F.relu(Z_3))) 
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2))) 
             
         elif self.decoder_type == 'BLT':
             for t in range(self.n_rep):
                 if t <1:
-                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4)
+                    Z_1 = self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,self.n_filter,4,4)
                     Z_2 = self.W_b_1(F.relu(Z_1))
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2)))
                 if t>=1:
-                    Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,32,4,4) + self.W_t_1(self.LRN(F.relu(Z_2))) + self.W_l_1(self.LRN(F.relu(Z_1))) 
+                    Z_1 =  self.Lin_3(F.relu(self.Lin_2(F.relu(self.Lin_1(z))))).view(-1,self.n_filter,4,4) + self.W_t_1(self.LRN(F.relu(Z_2))) + self.W_l_1(self.LRN(F.relu(Z_1))) 
                     Z_2 = self.W_b_1(self.LRN(F.relu(Z_1))) +  self.W_t_2(self.LRN(F.relu(Z_3))) + self.W_l_2(self.LRN(F.relu(Z_2))) 
                     Z_3 = self.W_b_2(self.LRN(F.relu(Z_2))) + self.W_l_3(self.LRN(F.relu(Z_3)))
             
                 
+        #final_img_list = final_img_list.append(self.W_b_3(self.LRN(F.relu(Z_3))))
         final_img = self.W_b_3(self.LRN(F.relu(Z_3)))
-    
+        
         return final_img
         
         

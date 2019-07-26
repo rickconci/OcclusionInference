@@ -15,15 +15,14 @@ from solvers.utils_mod import str2bool
 from solvers.visuals_mod import plotLearningCurves, linear_readout_sup
 
 torch.backends.cudnn.enabled = True
-torch.backends.cudnn.benchmark = True
-
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
 
 def main(args):
     seed = args.seed
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
-    print(args.testing_method)
     
     if args.testing_method == 'supervised_encoder' or args.testing_method == 'supervised_decoder':
         print("SUPERVISED!")
@@ -36,8 +35,8 @@ def main(args):
         print("Training")
         net.train()
         print("Testing")
-        net.test_loss()
-        net.gnrl_loss()
+        #net.test_loss()
+        #net.gnrl_loss()
         if args.testing_method == 'unsupervised':
             net.test_plots()
             #linear_readout_sup(net, max_epoch = 50)
@@ -47,10 +46,10 @@ def main(args):
         
     elif not args.train:
         print("Testing")
-        net.test_loss()
-        net.gnrl_loss()
-        if args.testing_method == 'unsupervised':
-            net.test_plots()
+        #net.test_loss()
+        #net.gnrl_loss()
+        #if args.testing_method == 'unsupervised':
+            #net.test_plots()
             #linear_readout_sup(net, max_epoch = 10)
         print("plotting learning curves!")
         plotLearningCurves(net)

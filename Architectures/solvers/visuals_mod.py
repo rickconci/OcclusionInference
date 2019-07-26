@@ -45,6 +45,7 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, sbd ,num_frames = 10
         z_sample = z_distributions[:, :NN.z_dim_bern]
     elif NN.z_dim_bern !=0 and NN.z_dim_gauss != 0:
         p = z_distributions[:, :NN.z_dim_bern]
+        p = F.sigmoid(p)
         mu = z_distributions[:, NN.z_dim_bern:(NN.z_dim_bern+NN.z_dim_gauss)]
         z_sample = torch.cat((p, mu),1) 
    
@@ -178,7 +179,10 @@ def construct_z_hist(NN, loader, global_iter, output_dir, dim='depth'):
                 target = sample['y']
                 z_image = NN._encode(image)
                 z_target = NN._encode(target)
-             
+                if NN.z_dim_bern != 0:
+                    z_image[:,:NN.z_dim_bern] = F.sigmoid(z_image[:,:NN.z_dim_bern])
+                    z_target[:,:NN.z_dim_bern] = F.sigmoid(z_target[:,:NN.z_dim_bern])
+                
                 z_dist = (z_image - z_target)[:, :NN.z_dim_tot]
                 depth_z_sqd += torch.mul(z_dist,z_dist).sum(0).div(z_image.size(0))
                 std_sqd += torch.std(torch.mul(z_dist,z_dist),0)
@@ -302,13 +306,13 @@ def plotLearningCurves(solver):
     """ plotting learning curves (training and testing losses and accuracies)
     """
     if solver.testing_method == 'unsupervised':
-    
-       
+        print(solver.gather.data['trainLoss'][-1])
+        
         fig_lc = plt.figure(figsize = (8,8))
         fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal train loss: {:.3f}, Final test loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
                            solver.params, solver.gather.data['trainLoss'][-1],
                            solver.gather.data['testLoss'][-1],
-                         solver.gather.data['gnrlLoss'][-1]), fontsize=14)
+                         solver.gather.data['gnrlLoss'][-1] ), fontsize=14)
         plt.subplot()
         plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'coral', linewidth=2.5, label = "train loss")
         plt.plot(solver.gather.data['iter'], solver.gather.data['testLoss'], 'seagreen', linewidth=2, label = "test loss")
@@ -356,15 +360,15 @@ def plotLearningCurves(solver):
         plt.savefig('{}/Test_Loss_Curves.png'.format(solver.output_dir))
         plt.close()
 
-        if solver.gather.data['grnlLoss'] :
+        if solver.gather.data['gnrlLoss'] :
             fig_lc = plt.figure(figsize = (8,8))
             fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nFinal Gnrl: loss: {:.3f}, recon loss: {:.3f}, KL loss: {:.3f} '.format(
-                           solver.params, solver.gather.data['grnlLoss'][-1],
+                           solver.params, solver.gather.data['gnrlLoss'][-1],
                            solver.gather.data['gnrl_recon_loss'][-1],
                          solver.gather.data['gnrl_kl_loss'][-1]), fontsize=14)
             plt.subplot()
             plt.plot(solver.gather.data['iter'], solver.gather.data['trainLoss'], 'r', linewidth=2.5, label = "train loss")
-            plt.plot(solver.gather.data['iter'], solver.gather.data['grnlLoss'], 'coral', linewidth=2.5, label = "grnlLoss")
+            plt.plot(solver.gather.data['iter'], solver.gather.data['gnrlLoss'], 'coral', linewidth=2.5, label = "gnrlLoss")
             plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_recon_loss'], 'seagreen', linewidth=2.5, label = "gnrl_recon_loss")
             plt.plot(solver.gather.data['iter'], solver.gather.data['gnrl_kl_loss'], 'dodgerblue', linewidth=2.5, label = "test gnrl_KL_loss")
             plt.xlabel("iterations")

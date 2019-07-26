@@ -64,7 +64,9 @@ def get_accuracy(outputs, targets, encoder_target_type):
         accuracy = torch.sum(outputs == targets)/outputs.size *100
         return(accuracy)
     else:
-        depth = F.sigmoid(outputs[:,0]).detach().round()
+        depth = F.sigmoid(outputs[:,0]).detach()#.round()
+        depth[depth<0.2] = 0
+        depth[depth>0.8] = 1
         depth_accuracy = torch.sum(depth == targets[:,0]).float()/batch_size *100
         black = torch.topk(outputs[:,1:11],1,dim=1 )[1]
         black_targets = torch.topk(targets[:,1:11],1,dim=1 )[1]
@@ -95,7 +97,7 @@ class DataGather(object):
                     testLoss=[],
                     test_recon_loss=[],
                     test_kl_loss=[],
-                    grnlLoss=[],
+                    gnrlLoss=[],
                     gnrl_recon_loss=[],
                    gnrl_kl_loss=[])
 

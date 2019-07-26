@@ -90,7 +90,7 @@ class Solver_sup(object):
             self.params = encoder_size
         elif self.testing_method =='supervised_decoder':
             print(decoder_size ,"parameters in the decoder!")
-            self.params = encoder_size
+            self.params = decoder_size
         
         print("CUDA availability: " + str(torch.cuda.is_available()))
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -216,7 +216,7 @@ class Solver_sup(object):
                                                train_accuracy = train_accuracy, test_accuracy = self.test_accuracy,
                                               gnrl_accuracy = self.accuracy)
                         else:
-                            accuracy_list = self.get_accuracy(final_out,y, self.encoder_target_type)
+                            accuracy_list = get_accuracy(final_out,y, self.encoder_target_type)
                             train_depth_accuracy = accuracy_list[0]
                             train_black_accuracy = accuracy_list[1]
                             train_white_accuracy = accuracy_list[2]
@@ -247,10 +247,10 @@ class Solver_sup(object):
                     print('[{}] train loss:{:.3f}'.format(self.global_iter, torch.mean(loss)))
                     if self.testing_method =='supervised_encoder': 
                         if self.encoder_target_type== 'joint':
-                            train_accuracy = self.get_accuracy(final_out, y, self.encoder_target_type)
+                            train_accuracy = get_accuracy(final_out, y, self.encoder_target_type)
                             print('[{}] train accuracy:{:.3f}'.format(self.global_iter, train_accuracy))
                         else:
-                            accuracy_list = self.get_accuracy(final_out,y,self.encoder_target_type)
+                            accuracy_list = get_accuracy(final_out,y,self.encoder_target_type)
                             train_depth_accuracy = accuracy_list[0]
                             train_black_accuracy = accuracy_list[1]
                             train_white_accuracy = accuracy_list[2]
@@ -343,9 +343,9 @@ class Solver_sup(object):
                     testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     final_out =testLoss_list[1]
                     if self.encoder_target_type== 'joint':
-                        test_accuracy += self.get_accuracy(final_out,y,self.encoder_target_type)
+                        test_accuracy += get_accuracy(final_out,y,self.encoder_target_type)
                     else:
-                        accuracy_list = self.get_accuracy(final_out,y,self.encoder_target_type)
+                        accuracy_list = get_accuracy(final_out,y,self.encoder_target_type)
                         depth_accuracy += accuracy_list[0]
                         black_accuracy += accuracy_list[1]
                         white_accuracy += accuracy_list[2]
@@ -389,9 +389,9 @@ class Solver_sup(object):
                     grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
                     final_out =grnlLoss_list[1]
                     if self.encoder_target_type== 'joint':
-                        test_accuracy += self.get_accuracy(final_out,y,self.encoder_target_type)
+                        test_accuracy += get_accuracy(final_out,y,self.encoder_target_type)
                     else:
-                        accuracy_list = self.get_accuracy(final_out,y,self.encoder_target_type)
+                        accuracy_list = get_accuracy(final_out,y,self.encoder_target_type)
                         depth_accuracy += accuracy_list[0]
                         black_accuracy += accuracy_list[1]
                         white_accuracy += accuracy_list[2]
