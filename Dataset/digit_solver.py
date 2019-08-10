@@ -38,7 +38,7 @@ class Solver(object):
         if self.unflip:
             print("UNFLIP IS ON: HALF OF IMAGES WILL NOT BE FLIPPED")
             
-      
+        self.hidden_traverse= False
         
         #Image params
         
@@ -46,8 +46,8 @@ class Solver(object):
             self.face_colour_set = [(0, 0, 0, 1.0),(255,255,255, 1.0)]
             self.edge_colour_set = self.face_colour_set
         elif args.digit_colour_type == "b_w_e":
-            self.face_colour_set = [(255,255,255, 1.0)]
-            self.edge_colour_set = [(0, 0, 0, 1.0)]
+            self.face_colour_set = [(0, 0, 0, 1.0)]
+            self.edge_colour_set = [(255,255,255, 1.0)]
         else:
             print("unrecognised face_colour_set option")
         
@@ -72,8 +72,14 @@ class Solver(object):
             self.offset_mean =  (0, 0)
             self.offset_cov = ((-0.25, 0.25), (-0.15, 0.15))
             self.offset_sample_type = 'uniform'
+        elif args.offset == 'hidden_traverse':
+            self.hidden_traverse = True
+            self.offset_sample_type = 'uniform'
+            self.offset_cov = ((0,0),(0,0))
+            self.n_letters = 2
         else:
             raise ValueError('unrecognised offset option')
+        
         
         if args.font_set == 'fixed':
             self.font_set = ['Liberation-Sans-Bold'] #['helvetica-bold'] 
@@ -83,8 +89,14 @@ class Solver(object):
     
     def create_train_set(self):
         print("Creating train sets!")
+        
         clutter_list = []
         for i in range(self.n_samples_train):
+            
+            if self.hidden_traverse == True:
+                x_back = np.linspace(start=-0.2, stop = 0.25, num=self.n_samples_train)
+                self.offset_mean =  [(round(x_back[i],2),0.00),(-0.20,0.00)]
+                
             clutter_list += [sample_clutter(n_letters=self.n_letters,
                                             digit_colour_type = self.digit_colour_type,
                                             face_colour_set =self.face_colour_set, 
@@ -97,7 +109,8 @@ class Solver(object):
                                             image_size = self.image_size,
                                             fontsize = self.fontsize,
                                             linewidth=self.linewidth,
-                                            generalisation_set= False
+                                            generalisation_set= False,
+                                            hidden_traverse = self.hidden_traverse
                                            )]
             
         clutter_list = io_mod.name_files('{}/digts'.format(self.filename), clutter_list=clutter_list)
@@ -129,8 +142,10 @@ class Solver(object):
             else:
                 cl.render_occlusion(fname="{}/digts/train/orig/orig_{}".format(
                     self.filename,i))
+                
+                
                 cl.render_occlusion(fname="{}/digts/train/inverse/inverse_{}".format(
-                    self.filename,i), inverse=True)
+                        self.filename,i), inverse=True)
                     
                     
                     

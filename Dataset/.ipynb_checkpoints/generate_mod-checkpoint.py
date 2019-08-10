@@ -110,8 +110,8 @@ def sample_clutter(**kwargs):
     size_cov = kwargs.get('size_cov', ((0, 0), (0, 0)))
     fontsize = kwargs.get('fontsize', 384)
     generalisation_set = kwargs.get('generalisation_set', False)
-
-    
+    hidden_traverse = kwargs.get('hidden_traverse', False)
+   
     pairings = {'2':'3', '3':'2', '0':'7', '7':'0', '1':'6', '6':'1', '4':'9', '9':'4', '5':'8', '8':'5'}
    
     character_set = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
@@ -132,7 +132,10 @@ def sample_clutter(**kwargs):
             characters.append(pairings[characters[i]] )
             character_set.remove(characters[i])
             character_set.remove(pairings[characters[i]])
-            
+    
+    
+    if hidden_traverse == True:
+        characters = ['3', '8']
     
     print(characters)
     
@@ -147,16 +150,20 @@ def sample_clutter(**kwargs):
     
     if offset_sample_type == 'random_unoccluded':
         offset_mean = random_unoccluding_offset(rad=0.225)
-
+        
   
     for i in range(n_letters):
         char_opt['identity'] = characters[i]
         char_opt['font'] = random.choice(font_set)
         
+        #sample face and edge colour 
         if n_letters ==2:
             if digit_colour_type == 'b_w':
                 if i ==0:
-                    char_opt['face_colour'] = random.choice(face_colour_set) 
+                    if hidden_traverse == False:
+                        char_opt['face_colour'] = random.choice(face_colour_set) 
+                    elif hidden_traverse == True:
+                        char_opt['face_colour'] = [0, 0, 0, 1.0]
                     char_opt['edge_colour'] = char_opt['face_colour'] 
                 elif i==1:
                     face_colour = []
@@ -178,7 +185,8 @@ def sample_clutter(**kwargs):
         # Sample the offset
         if tuple(offset_cov) == ((0, 0), (0, 0)):
             char_opt['offset'] = offset_mean[i]
-
+            print(char_opt['offset'])
+    
         elif offset_sample_type == 'uniform':
             x_offset = offset_mean[0] + np.random.uniform(offset_cov[0][0],
                                                        offset_cov[0][1])
@@ -192,7 +200,7 @@ def sample_clutter(**kwargs):
 
             elif i>=1:
                 distance = np.sqrt((x_pos_1 - x_offset)**2 + (y_pos_1 - y_offset)**2)
-                while distance <0.10 or distance >0.35:
+                while distance <0.10 or distance >0.28:
                     #print("too close!")
                     x_offset = offset_mean[0] + np.random.uniform(offset_cov[0][0],
                                                            offset_cov[0][1])

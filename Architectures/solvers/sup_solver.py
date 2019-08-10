@@ -12,6 +12,7 @@ from copy import deepcopy
 from IPython.display import Image
 import pickle
 import math
+import pandas as pd
 
 import visdom
 
@@ -25,8 +26,8 @@ import torchvision
 from torchvision.utils import make_grid, save_image
 
 import sys
-sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
-#sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
+#sys.path.insert(0, '/Users/riccardoconci/Desktop/code/ZuckermanProject/OcclusionInference/Architectures')
+sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 from data_loaders.dataset_sup import return_data_sup_encoder, return_data_sup_decoder
 from models.BLT_models import multi_VAE, SB_decoder, spatial_broadcast_decoder
 
@@ -46,9 +47,17 @@ class Solver_sup(object):
         self.kernel_size = args.kernel_size
         self.padding = args.padding
         self.sbd = args.sbd
+        self.AE = args.AE
         
         self.encoder_target_type = args.encoder_target_type
                 
+        data_csv = "{}digts.csv".format(args.dset_dir)
+        data = pd.read_csv(data_csv, header=None)
+        if  data.shape[1] > 37:
+            self.n_digits =3
+        elif data.shape[1] <= 37:
+            self.n_digits = 2
+            
         if args.encoder_target_type == 'joint':
             self.z_dim = 10
         elif args.encoder_target_type == 'black_white':
@@ -57,7 +66,16 @@ class Solver_sup(object):
             self.z_dim = 21
         elif args.encoder_target_type == 'depth_black_white_xy_xy':
             self.z_dim = 25
-            
+        elif args.encoder_target_type== "depth_ordered_one_hot":
+            if self.n_digits == 2:
+                self.z_dim = 20
+            elif self.n_digits ==3:
+                self.z_dim = 30
+        elif args.encoder_target_type== "depth_ordered_one_hot_xy":
+            if self.n_digits == 2:
+                self.z_dim = 24
+            elif self.n_digits ==3:
+                self.z_dim = 36
         
         if args.dataset.lower() == 'digits_gray':
             self.nc = 1
@@ -67,7 +85,7 @@ class Solver_sup(object):
             raise NotImplementedError
         
         net = multi_VAE(self.encoder,self.decoder,self.z_dim, 0 ,self.n_filter,self.nc,
-                        self.n_rep,self.sbd, self.kernel_size, self.padding)
+                        self.n_rep,self.sbd, self.kernel_size, self.padding, self.AE)
         
         
         if self.sbd == True:
@@ -86,11 +104,13 @@ class Solver_sup(object):
                     decoder_size += param.numel()
         tot_size = encoder_size + decoder_size
         if self.testing_method =='supervised_encoder':
-            print(encoder_size ,"parameters in the encoder!")
+            print(encoder_size ,"parameters in the ENCODER!")
             self.params = encoder_size
+        
         elif self.testing_method =='supervised_decoder':
-            print(decoder_size ,"parameters in the decoder!")
+            print(decoder_size ,"parameters in the DECODER!")
             self.params = decoder_size
+            
         
         print("CUDA availability: " + str(torch.cuda.is_available()))
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -101,6 +121,17 @@ class Solver_sup(object):
         self.net = net.to(self.device) 
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
         
+           
+        if self.testing_method == 'supervised_encoder':
+            self.train_dl, self.gnrl_dl  = return_data_sup_encoder(args)
+        elif self.testing_method == 'supervised_decoder':
+            self.train_dl, self.gnrl_dl , self.gnrl_data =  return_data_sup_decoder(args)
+        else:
+            raise NotImplementedError    
+
+          
+        
+        
         self.lr = args.lr
         self.l2_loss = args.l2_loss
         self.beta1 = args.beta1
@@ -108,15 +139,7 @@ class Solver_sup(object):
         if args.optim_type =='Adam':
             self.optim = optim.Adam(self.net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
         elif args.optim_type =='SGD':
-            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
-        
-        if self.testing_method == 'supervised_encoder':
-             self.train_dl, self.test_dl, self.gnrl_dl  = return_data_sup_encoder(args)
-        elif self.testing_method == 'supervised_decoder':
-            self.train_dl, self.test_dl, self.gnrl_dl , self.test_data, self.gnrl_data =  return_data_sup_decoder(args)
-        else:
-            raise NotImplementedError    
-        
+            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)    
         self.max_epoch = args.max_epoch
         self.global_iter = 0
         self.max_epoch = args.max_epoch
@@ -124,7 +147,9 @@ class Solver_sup(object):
         self.gather_step = args.gather_step
         self.display_step = args.display_step
         self.save_step = args.save_step
-          
+        
+            
+            
         self.image_size = args.image_size
 
         self.viz_name = args.viz_name
@@ -160,7 +185,7 @@ class Solver_sup(object):
         self.batch_size = args.batch_size
         
         
-        self.gather = DataGather(self.testing_method, self.encoder_target_type)
+        self.gather = DataGather(self.testing_method, self.encoder_target_type, self.n_digits)
         
         
     def train(self):
@@ -186,18 +211,19 @@ class Solver_sup(object):
                 #print(x.shape)
                 #print(y.shape)
                 #for i in range(x.size(0)):
-                #    #print(x[i,:])
-                #    torchvision.utils.save_image( x[i,0,:,:] , '{}/x_{}_{}.png'.format(self.output_dir, self.global_iter, i)) 
-                 #   print(y[i,:])
+                #    print(x[i,:])
+                #    torchvision.utils.save_image( y[i,0,:,:] , '{}/x_{}_{}.png'.format(self.output_dir, self.global_iter, i)) 
+                #   print(y[i,:])
                 
                 if self.testing_method =='supervised_encoder':
-                    loss, final_out = self.run_model(self.testing_method, x, y, self.l2_loss)
-                
+                    loss, final_loss_list, final_out, train_l2_reg_loss = self.run_model(self.testing_method, x, y, self.l2_loss)
                 elif self.testing_method == 'supervised_decoder':
                     x = x.type(torch.FloatTensor).to(self.device)
-                    loss, recon = self.run_model(self.testing_method, x, y, self.l2_loss)
-                    
+                    loss, loss_list, recon, train_l2_reg_loss = self.run_model(self.testing_method, x, y, self.l2_loss)
+                    loss_list = [round(x.item(),3) for x in loss_list]
+                
                 self.adjust_learning_rate(self.optim, (count/iters_per_epoch))
+                
                 self.optim.zero_grad()
                 loss.backward()
                 self.optim.step()
@@ -206,66 +232,136 @@ class Solver_sup(object):
             
             
                 if self.global_iter%self.gather_step == 0:
-                    self.test_loss()
                     self.gnrl_loss()
                   
                     if self.testing_method =='supervised_encoder': 
+                        
                         if self.encoder_target_type== 'joint':
-                            self.gather.insert(iter=self.global_iter, train_loss=loss.data, 
-                                           test_loss = self.testLoss,gnrl_loss = self.gnrlLoss,
-                                               train_accuracy = train_accuracy, test_accuracy = self.test_accuracy,
-                                              gnrl_accuracy = self.accuracy)
-                        else:
-                            accuracy_list = get_accuracy(final_out,y, self.encoder_target_type)
+                            self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
+                                               gnrl_loss = self.gnrlLoss,
+                                               train_accuracy = train_accuracy,
+                                                gnrl_accuracy = self.accuracy)
+                        elif self.encoder_target_type== "depth_black_white" or self.encoder_target_type== "depth_black_white_xy_xy":
+                            accuracy_list = get_accuracy(final_out,y, self.encoder_target_type , self.n_digits)
                             train_depth_accuracy = accuracy_list[0]
                             train_black_accuracy = accuracy_list[1]
                             train_white_accuracy = accuracy_list[2]
-                            self.gather.insert(iter=self.global_iter, train_loss=loss.data, 
-                                           test_loss = self.testLoss, gnrl_loss = self.gnrlLoss,
+                            self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
+                                               gnrl_loss = self.gnrlLoss,
                                                train_depth_accuracy = train_depth_accuracy,
                                                train_black_accuracy = train_black_accuracy,
                                                train_white_accuracy= train_white_accuracy,
-                                               test_depth_accuracy = self.test_depth_accuracy, 
-                                               test_black_accuracy = self.test_black_accuracy,
-                                               test_white_accuracy  = self.test_white_accuracy,
                                                gnrl_depth_accuracy = self.gnrl_depth_accuracy,
                                                gnrl_black_accuracy = self.gnrl_black_accuracy,
-                                               gnrl_white_accuracy = self.gnrl_white_accuracy )
-                        
+                                               gnrl_white_accuracy = self.gnrl_white_accuracy,
+                                              depth_loss = float(final_loss_list[1]),
+                                              black_loss = float(final_loss_list[2]),
+                                              white_loss = float(final_loss_list[3]),
+                                              xy_loss = float(final_loss_list[4]))
+                        elif self.encoder_target_type== "depth_ordered_one_hot" or self.encoder_target_type== "depth_ordered_one_hot_xy" :
+                            if self.n_digits ==2:
+                                accuracy_list = get_accuracy(final_out,y, self.encoder_target_type, self.n_digits)
+                                train_back_accuracy = accuracy_list[0]
+                                train_front_accuracy = accuracy_list[1]
+                                self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
+                                                   gnrl_loss = self.gnrlLoss,
+                                                   l2_reg_loss = train_l2_reg_loss.item(),
+                                                   
+                                                   train_back_accuracy = train_back_accuracy,
+                                                   train_front_accuracy= train_front_accuracy,
+                                                   gnrl_back_accuracy = self.gnrl_back_accuracy,
+                                                   gnrl_front_accuracy = self.gnrl_front_accuracy,
+                                                   
+                                                   train_tot_final_iter_loss = float(final_loss_list[0]) + train_l2_reg_loss,
+                                                   train_back_loss = float(final_loss_list[1]),
+                                                   train_front_loss = float(final_loss_list[3]),
+                                                   train_xy_loss = float(final_loss_list[4]),
+                                                   
+                                                   gnrl_tot_final_iter_loss = self.gnrl_total_last_iter_loss,
+                                                   gnrl_back_loss = self.gnrl_back_loss,
+                                                   gnrl_front_loss = self.gnrl_front_loss,
+                                                   gnrl_xy_loss= self.gnrl_xy_loss
+                                                  )
+                                
+                            elif self.n_digits ==3:
+                                accuracy_list = get_accuracy(final_out,y, self.encoder_target_type, self.n_digits)
+                                train_back_accuracy = accuracy_list[0]
+                                train_mid_accuracy = accuracy_list[1]
+                                train_front_accuracy = accuracy_list[2]
+                                self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
+                                                   gnrl_loss = self.gnrlLoss,
+                                                   l2_reg_loss = train_l2_reg_loss,
+                                                   
+                                                   train_back_accuracy = train_back_accuracy,
+                                                   train_mid_accuracy = train_mid_accuracy,
+                                                   train_front_accuracy= train_front_accuracy,
+                                                   gnrl_back_accuracy = self.gnrl_back_accuracy,
+                                                   gnrl_mid_accuracy = self.gnrl_mid_accuracy,
+                                                   gnrl_front_accuracy = self.gnrl_front_accuracy,
+                                                   
+                                                   train_tot_final_iter_loss = float(final_loss_list[0]) + train_l2_reg_loss,
+                                                   train_back_loss = float(final_loss_list[1]),
+                                                   train_mid_loss = float(final_loss_list[2]),
+                                                   train_front_loss = float(final_loss_list[3]),
+                                                   train_xy_loss = float(final_loss_list[4]),
+                                                   
+                                                   gnrl_tot_final_iter_loss = self.gnrl_total_last_iter_loss,
+                                                   gnrl_back_loss = self.gnrl_back_loss,
+                                                   gnrl_mid_loss = self.gnrl_mid_loss,
+                                                   gnrl_front_loss = self.gnrl_front_loss,
+                                                   gnrl_xy_loss=  self.gnrl_xy_loss,
+                                                   
+                                                  )
+                                with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                                    myfile.write('\n[{}] train_loss:{:.3f}, gnrl_loss:{:.3f}'.format(self.global_iter,loss.data.item(), self.gnrlLoss))
+                            
                         
                         
                     elif self.testing_method =='supervised_decoder':
-                        
-                        self.gather.insert(iter=self.global_iter, train_recon_loss = torch.mean(loss), 
-                                           test_recon_loss = self.testLoss, gnrl_recon_loss = self.gnrlLoss)
-                        
-                        with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                            myfile.write('\n[{}] train_recon_loss:{:.3f}, test_recon_loss:{:.3f} , gnrl_recon_loss:{:.3f}'.format(self.global_iter, torch.mean(loss), self.testLoss, self.gnrlLoss))
+                        if self.decoder =='B':
+                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = self.gnrlLoss)
+                            with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                                myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}'.format(self.global_iter, loss.item(), self.gnrlLoss))
+                        else:
+                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = self.gnrlLoss, train_recon_last_iter_loss=loss_list[-2], gnrl_total_last_iter_loss= self.gnrl_total_last_iter_loss)
+                            with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
+                                myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}, {}'.format(self.global_iter, torch.mean(loss), self.gnrlLoss,loss_list))
                 
                 
                 if self.global_iter%self.display_step == 0:
-                    print('[{}] train loss:{:.3f}'.format(self.global_iter, torch.mean(loss)))
+                    print('[{}] train loss:{:.3f}'.format(self.global_iter, loss.item()))
+                    
                     if self.testing_method =='supervised_encoder': 
                         if self.encoder_target_type== 'joint':
-                            train_accuracy = get_accuracy(final_out, y, self.encoder_target_type)
+                            train_accuracy = get_accuracy(final_out, y, self.encoder_target_type, self.n_digits)
                             print('[{}] train accuracy:{:.3f}'.format(self.global_iter, train_accuracy))
-                        else:
-                            accuracy_list = get_accuracy(final_out,y,self.encoder_target_type)
+                        elif self.encoder_target_type== "depth_black_white" or self.encoder_target_type== "depth_black_white_xy_xy":
+                            accuracy_list = get_accuracy(final_out,y,self.encoder_target_type, self.n_digits)
                             train_depth_accuracy = accuracy_list[0]
                             train_black_accuracy = accuracy_list[1]
                             train_white_accuracy = accuracy_list[2]
                             
                             print('[{}], train_depth_accuracy:{:.3f}, train_black_accuracy:{:.3f}, train_white_accuracy:{:.3f}'.format(self.global_iter, train_depth_accuracy, train_black_accuracy, train_white_accuracy))
-                            
-                    
-                        
-                
+                        elif self.encoder_target_type== "depth_ordered_one_hot" or self.encoder_target_type== "depth_ordered_one_hot_xy" :
+                            if self.n_digits ==2:
+                                accuracy_list = get_accuracy(final_out,y, self.encoder_target_type, self.n_digits)
+                                train_back_accuracy = accuracy_list[0]
+                                train_front_accuracy = accuracy_list[1]
+                                print('[{}], train_back_accuracy:{:.3f}, train_front_accuracy:{:.3f}'.format(self.global_iter, train_back_accuracy, train_front_accuracy))
+                                
+                            elif self.n_digits ==3:
+                                accuracy_list = get_accuracy(final_out,y, self.encoder_target_type , self.n_digits)
+                                train_back_accuracy = accuracy_list[0]
+                                train_mid_accuracy = accuracy_list[1]
+                                train_front_accuracy = accuracy_list[2]
+
+                                print('[{}], train_back_accuracy:{:.3f}, train_mid_accuracy:{:.3f}, train_front_accuracy:{:.3f}'.format(self.global_iter, train_back_accuracy, train_mid_accuracy, train_front_accuracy))
+                    elif self.testing_method =='supervised_decoder':
+                        if self.decoder != 'B':
+                            print([round(x,3) for x in loss_list])
+
                 if self.global_iter%self.save_step == 0:
                     self.save_checkpoint('last') 
-                    
-                    oldtestLoss = self.testLoss
-                    self.test_loss()
-                    print('old test loss', oldtestLoss,'current test loss', self.testLoss )
                     
                     if self.gnrl_dl != 0:
                         oldgnrlLoss = self.gnrlLoss
@@ -274,10 +370,6 @@ class Solver_sup(object):
                         if self.gnrlLoss < oldgnrlLoss:
                             self.save_checkpoint('best_gnrl')
                             pbar.write('Saved best GNRL checkpoint(iter:{})'.format(self.global_iter))
-                        
-                    if self.testLoss  < oldtestLoss or self.gnrlLoss < oldgnrlLoss:
-                        self.save_checkpoint('best_test')
-                        pbar.write('Saved best TEST checkpoint(iter:{})'.format(self.global_iter))
                     
                     if self.testing_method == 'supervised_decoder':
                         self.test_images()
@@ -297,81 +389,44 @@ class Solver_sup(object):
         pbar.close()
     
     def adjust_learning_rate(self, optimizer, epoch):
-        """Sets the learning rate to the initial LR decayed by 10 every 30 epochs"""
+        """Sets the learning rate to the initial LR decayed by 10 every 40 epochs"""
         lr = self.lr * (0.1 ** (epoch / 40))
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
         #print(lr)
         
-    def run_model(self, testing_method, x, y, l2_loss):
+    def run_model(self, testing_method, x, y, l2_coeff):
         if self.testing_method == 'supervised_encoder':
-            final_out = self.net._encode(x)
-            loss = supervised_encoder_loss(final_out, y, self.encoder_target_type)
+            final_out_list = self.net._encode(x)
+            loss = 0.0
+            for i in range(len(final_out_list)):
+                final_loss_list = supervised_encoder_loss(final_out_list[i], y, self.n_digits, self.encoder_target_type)
+                #if self.global_iter%self.display_step == 0:
+                #    print('iter {}'.format(i), [x.item() for x in final_loss_list])
+                loss += final_loss_list[0]
+                
             l2 = 0
             for p in self.net.parameters():
                 l2 = l2 + p.pow(2).sum() #*0.5
-            loss = loss + l2_loss * l2
-            return([loss, final_out])
+            loss = loss + l2_coeff * l2
+            return([loss, final_loss_list, final_out_list[-1], l2_coeff*l2])
         
         elif self.testing_method =='supervised_decoder':
             if self.sbd:
                 x = self.sbd_model(x)
                 x = x.to(self.device)
-            recon = self.net._decode(x)
-            loss = supervised_decoder_loss(y, recon)
+            recon_list = self.net._decode(x)
+            loss_list = []
+            loss = 0.0
+            for i in range(len(recon_list)):
+                loss_list.append(supervised_decoder_loss(y, recon_list[i]))
+                loss += supervised_decoder_loss(y, recon_list[i])
             l2 = 0
             for p in self.net.parameters():
                 l2 = l2 + p.pow(2).sum() #*0.5
-            loss = loss + l2_loss * l2
-            return([loss, recon])
-       
-    def test_loss(self):
-        print("Calculating test loss")
-        testLoss = 0.0
-        test_accuracy=0.0
-        depth_accuracy = 0.0
-        black_accuracy = 0.0
-        white_accuracy = 0.0
-        cnt = 0
-        
-        with torch.no_grad():
-            for sample in self.test_dl:
-                x = sample['x'].to(self.device)
-                y = sample['y'].to(self.device)
-                
-                if self.testing_method =='supervised_encoder':
-                    testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
-                    final_out =testLoss_list[1]
-                    if self.encoder_target_type== 'joint':
-                        test_accuracy += get_accuracy(final_out,y,self.encoder_target_type)
-                    else:
-                        accuracy_list = get_accuracy(final_out,y,self.encoder_target_type)
-                        depth_accuracy += accuracy_list[0]
-                        black_accuracy += accuracy_list[1]
-                        white_accuracy += accuracy_list[2]
-                elif self.testing_method =='supervised_decoder':
-                    x = x.type(torch.FloatTensor).to(self.device)
-                    testLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
-                    test_accuracy = 0
-                testLoss += testLoss_list[0]
-                cnt += 1
+            loss = loss + l2_coeff * l2
+            return([ loss, loss_list, recon_list[-1], l2_coeff*l2])
 
-        testLoss = testLoss.div(cnt)
-        self.testLoss = testLoss.cpu().numpy()#[0]
-        print('[{}] test_Loss:{:.3f}'.format(self.global_iter, self.testLoss))
-
-        if self.encoder_target_type== 'joint':
-            self.test_accuracy = test_accuracy / cnt
-            print('[{}] test accuracy:{:.3f}'.format(self.global_iter, self.test_accuracy))
-        else:
-            self.test_depth_accuracy = depth_accuracy/cnt
-            self.test_black_accuracy = black_accuracy/cnt
-            self.test_white_accuracy = white_accuracy/cnt
-            print('[{}] test_depth_accuracy:{:.3f}, test_black_accuracy:{:.3f}, test_white_accuracy:{:.3f}'.format(self.global_iter, self.test_depth_accuracy, self.test_black_accuracy,self.test_white_accuracy))
-    
-       
-   
-    
     def gnrl_loss(self):
         print("Calculating generalisation loss")
         gnrlLoss = 0.0
@@ -379,6 +434,16 @@ class Solver_sup(object):
         depth_accuracy = 0.0
         black_accuracy = 0.0
         white_accuracy = 0.0
+        gnrl_back_accuracy = 0.0
+        gnrl_mid_accuracy = 0.0
+        gnrl_front_accuracy =0.0
+        gnrl_total_last_iter_loss= 0.0
+        gnrl_back_loss = 0.0
+        gnrl_front_loss = 0.0
+        gnrl_xy_loss = 0.0
+        gnrl_mid_loss = 0.0
+        gnrl_l2_loss = 0.0
+        gnrlLoss_set = []
         cnt = 0
         with torch.no_grad():
             for sample in self.gnrl_dl:
@@ -386,44 +451,111 @@ class Solver_sup(object):
                 y = sample['y'].to(self.device)
                     
                 if self.testing_method =='supervised_encoder':
-                    grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
-                    final_out =grnlLoss_list[1]
+                    grnlLoss_list = self.run_model(self.testing_method, x, y, self.l2_loss)
+                    final_encoder_losses = grnlLoss_list[1]
+                    final_encoder_losses = [x.item() for x in final_encoder_losses]
+                    gnrl_back_loss += final_encoder_losses[1] 
+                    gnrl_front_loss += final_encoder_losses[3]
+                    gnrl_xy_loss += final_encoder_losses[4]
+                    gnrl_l2_loss +=  grnlLoss_list[3]
+                    
+                    gnrl_total_last_iter_loss += final_encoder_losses[0]
+                    gnrl_total_last_iter_loss += grnlLoss_list[3]
+                    
+ 
+                    if self.n_digits ==3:
+                        gnrl_mid_loss += final_encoder_losses[2]
+                    
+                    final_out = grnlLoss_list[2]
+                    
                     if self.encoder_target_type== 'joint':
-                        test_accuracy += get_accuracy(final_out,y,self.encoder_target_type)
-                    else:
-                        accuracy_list = get_accuracy(final_out,y,self.encoder_target_type)
+                        test_accuracy += get_accuracy(final_out,y,self.encoder_target_type, self.n_digits)
+                    elif self.encoder_target_type== "depth_black_white" or self.encoder_target_type== "depth_black_white_xy_xy":
+                        accuracy_list = get_accuracy(final_out,y,self.encoder_target_type, self.n_digits)
                         depth_accuracy += accuracy_list[0]
                         black_accuracy += accuracy_list[1]
                         white_accuracy += accuracy_list[2]
+                    elif self.encoder_target_type== "depth_ordered_one_hot" or self.encoder_target_type== "depth_ordered_one_hot_xy" :
+                        if self.n_digits ==2:
+                            accuracy_list = get_accuracy(final_out,y, self.encoder_target_type, self.n_digits)
+                            gnrl_back_accuracy += accuracy_list[0]
+                            gnrl_front_accuracy += accuracy_list[1]
+                                
+                        elif self.n_digits ==3:
+                            accuracy_list = get_accuracy(final_out,y, self.encoder_target_type, self.n_digits)
+                            gnrl_back_accuracy += accuracy_list[0]
+                            gnrl_mid_accuracy += accuracy_list[1]
+                            gnrl_front_accuracy += accuracy_list[2]
+                        
                 elif self.testing_method =='supervised_decoder':
                     x = x.type(torch.FloatTensor).to(self.device)
-                    grnlLoss_list= self.run_model(self.testing_method, x, y, self.l2_loss)
+                    grnlLoss_list = self.run_model(self.testing_method, x, y, self.l2_loss)
+                    gnrlLoss_list_sep = grnlLoss_list[1]
+                    gnrlLoss_list_sep = [x.item() for x in gnrlLoss_list_sep]
+                    gnrl_total_last_iter_loss += gnrlLoss_list_sep[-1]
+                    gnrl_total_last_iter_loss = gnrl_total_last_iter_loss + grnlLoss_list[-1]
+                    gnrl_l2_loss +=  grnlLoss_list[-1]
                     grnl_accuracy = 0
+                    #gnrlLoss_set = [sum(x) for x in zip(grnlLoss_list[1], gnrlLoss_set)]
+                
                 gnrlLoss += grnlLoss_list[0]
+
                 cnt += 1
                 
         gnrlLoss = gnrlLoss.div(cnt)
-        self.gnrlLoss = gnrlLoss.cpu().numpy()
-        print('[{}] gnrl_Loss:{:.3f}'.format(self.global_iter, self.gnrlLoss))
-        if self.encoder_target_type== 'joint':
-            self.gnrl_accuracy = gnrl_accuracy / cnt
-            print('[{}] gnrl accuracy:{:.3f}'.format(self.global_iter, self.gnrl_accuracy))
-        else:
-            self.gnrl_depth_accuracy = depth_accuracy/cnt
-            self.gnrl_black_accuracy = black_accuracy/cnt
-            self.gnrl_white_accuracy = white_accuracy/cnt
-            print('[{}] gnrl_depth_accuracy:{:.3f}, gnrl_black_accuracy:{:.3f}, gnrl_white_accuracy:{:.3f}'.format(self.global_iter, self.gnrl_depth_accuracy, self.gnrl_black_accuracy,self.gnrl_white_accuracy))
-            
+        self.gnrlLoss = gnrlLoss.cpu().item()
+        self.gnrl_l2_loss = gnrl_l2_loss/cnt
+        print('[{}] all iters gnrl_Loss:{:.3f}, l2_loss{:.3f}'.format(self.global_iter, self.gnrlLoss, self.gnrl_l2_loss))
+        
+        if self.testing_method =='supervised_decoder':
+            self.gnrl_total_last_iter_loss = gnrl_total_last_iter_loss/cnt
+            gnrlLoss_set = [x/cnt for x in gnrlLoss_set]
+            print(gnrlLoss_set)
+        elif self.testing_method =='supervised_encoder':
+            if self.encoder_target_type== 'joint':
+                self.gnrl_accuracy = gnrl_accuracy / cnt
+                print('[{}] gnrl accuracy:{:.3f}'.format(self.global_iter, self.gnrl_accuracy))
+            elif self.encoder_target_type== "depth_black_white" or self.encoder_target_type== "depth_black_white_xy_xy":
+                self.gnrl_depth_accuracy = depth_accuracy/cnt
+                self.gnrl_black_accuracy = black_accuracy/cnt
+                self.gnrl_white_accuracy = white_accuracy/cnt
+                print('[{}] gnrl_depth_accuracy:{:.3f}, gnrl_black_accuracy:{:.3f}, gnrl_white_accuracy:{:.3f}'.format(self.global_iter, self.gnrl_depth_accuracy, self.gnrl_black_accuracy,self.gnrl_white_accuracy))
+            elif self.encoder_target_type== "depth_ordered_one_hot" or self.encoder_target_type== "depth_ordered_one_hot_xy" :
+                self.gnrl_back_loss = gnrl_back_loss/cnt
+                self.gnrl_front_loss = gnrl_front_loss/cnt
+                self.gnrl_xy_loss = gnrl_xy_loss/cnt
+                
+                self.gnrl_total_last_iter_loss = gnrl_total_last_iter_loss/cnt
+               
+
+                if self.n_digits ==2:
+                    self.gnrl_back_accuracy = gnrl_back_accuracy/cnt
+                    self.gnrl_front_accuracy = gnrl_front_accuracy/cnt
+                    print('[{}] tot_last_iter_gnrl_loss{:.3f}, last_iter_gnrl_back_loss:{:.3f}, last_iter_gnrl_front_loss:{:.3f}, last_iter_gnrl_xy_loss{:.3f}'.format(
+                                                                                                                        self.global_iter, self.gnrl_total_last_iter_loss, 
+                                                                                                                        self.gnrl_back_loss,self.gnrl_front_loss, self.gnrl_xy_loss))
+                    print('[{}] gnrl_back_accuracy:{:.3f}, gnrl_front_accuracy:{:.3f}'.format(self.global_iter, self.gnrl_back_accuracy,self.gnrl_front_accuracy))
+                elif self.n_digits ==3:
+                    self.gnrl_mid_loss = gnrl_mid_loss/cnt
+                    self.gnrl_back_accuracy = gnrl_back_accuracy/cnt
+                    self.gnrl_mid_accuracy = gnrl_mid_accuracy/cnt
+                    self.gnrl_front_accuracy = gnrl_front_accuracy/cnt
+                    print('[{}] tot_last_iter_gnrl_loss{:.3f}, last_iter_gnrl_back_loss:{:.3f},last_iter_gnrl_mid_loss:{:.3f}, last_iter_gnrl_front_loss:{:.3f}, last_iter_gnrl_xy_loss{:.3f}'.format(
+                                                                                                                        self.global_iter, self.gnrl_total_last_iter_loss, 
+                                                                                                                        self.gnrl_back_loss,self.gnrl_mid_loss, self.gnrl_front_loss, self.gnrl_xy_loss))
+                    print('[{}] gnrl_back_accuracy:{:.3f}, gnrl_mid_accuracy:{:.3f}, gnrl_front_accuracy:{:.3f}'.format(self.global_iter, self.gnrl_back_accuracy, self.gnrl_mid_accuracy,self.gnrl_front_accuracy))
+
+        return(self.gnrlLoss)
 
     def test_images(self):
         net_copy = deepcopy(self.net)
         net_copy.to('cpu')
         
-        print('Reconstructing test Images!')
         with torch.no_grad():
-            plot_decoder_img(net_copy, self.test_data, self.output_dir, self.global_iter, self.sbd, type="test", n=20 )
             print('Reconstructing gnrl Images!')
             plot_decoder_img(net_copy, self.gnrl_data, self.output_dir, self.global_iter, self.sbd, type="gnrl", n=20 )
+            
+        
 
         
     

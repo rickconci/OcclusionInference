@@ -21,7 +21,7 @@ if __name__ == "__main__":
     #Image params
     parser.add_argument('--n_letters', default=2, type=int, help='number of letters per image')
     parser.add_argument('--digit_colour_type', default='b_w', type=str, help='colours of digit: b_w or b_w_e')
-    parser.add_argument('--offset', default='fixed_unoccluded', type=str, help='type of offset of digits: fixed_unoccluded, random_unoccluded, fixed_occluded, random_occluded')
+    parser.add_argument('--offset', default='fixed_unoccluded', type=str, help='type of offset of digits: fixed_unoccluded, random_unoccluded, fixed_occluded, random_occluded, hidden traveerse ')
     parser.add_argument('--font_set', default='fixed', type=str, help='fixed or random font set')
 
     #Image hyperparams
