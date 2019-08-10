@@ -48,5 +48,65 @@ The datset code requires the following packages that should be downloaded using 
 
 
 
+## Usage
+
+### Creating datasets
+
+Shell file for creating dataset found in the Datsets folder and entitled:
+
+```
+wkst_dataset_create.sh
+```
+
+which contains:
+
+```
+python main_digit_create.py \
+   --n_samples_train 100000 --n_samples_gnrl 10000 \
+   --n_letters 2 --offset random_occluded --digit_colour_type b_w_e --linewidth 20 \
+   --fontsize 180 --FILENAME /home/riccardo/Desktop/Data/100k_2digt_BWE_2 \
+```
+This code creates one folder (the "FILENAME"), within which two more folders are created, one for training images and one for testing images. The number of training and testing images are set by "n_samples_train" and "n_samples_gnrl" in that order. 
+
+The number of digits in each image of both training and testing sets is set by 'n_letters'. 
+"offset" can take five options: *fixed_occluded*, *fixed_unoccluded*, *random_unccluded*, *random_occluded*, and *hidden_traverse*. The last one is used to create the small set of images for the behaviour task (see Results in Thesis).
+
+"digit_colour_type" can either take *b_w* or *b_w_e* to signify digits being either one black and one white (only works with n_digits=2), or each digit being black with a white edge (works with n_digits =>2). 
+
+Finally, "linewidth" and "fontsize" are parameters describing the size of the edge around the digit and the size of the digit itself. When using the *b_w* paramter, I reccommend using linewidth = 5 and fontsize=220. When using *b_w_e* I reccommend using linewidth = 20 and fontsize = 180. These are not set numbers, however, and can be adapted to the researcher's preference.
+
+
+### Training and testing ANNs
+
+Within the Architecture folder are four other folders: 
+* data_loaders: code for converting .png files (dataset) into torch arrays, and returning dataloaders to be used in ANN training (see Pytorch for more on Dataloaders). 
+* models: contains various versions of code for models. The most recent and correct one is **BLT_models**.
+* solvers: contains the main workhorse of the code: pulls together specified arguments, models, datasets etc to train and test the ANNs. Contains two scripts - one called **sup_solver** for supervised tasks and **unsup_solver** for unsupervised tasks. 
+* run_files: contains all the .sh files for different tasks, datasets and GPU clusters/workstations.  
+
+
+An example supervised .sh file is shown below:
+```
+python main_mod.py --train True --ckpt_name None --testing_method supervised_decoder \
+    --encoder B --decoder B --sbd False --encoder_target_type depth_ordered_one_hot_xy \
+    --n_filter 32 --n_rep 4 --kernel_size 4 --padding 1 \
+    --optim_type Adam --batch_size 100 --lr 5e-3 --beta 0 \
+    --max_epoch 80 --gather_step 500 --display_step 50 --save_step 10000 \
+     --dset_dir /home/riccardo/Desktop/Data/100k_2digt_BWE_2/digts/ \
+    --output_dir /home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/arch/B  \
+```
+
+An example unsupervised .sh file is shown below:
+```
+python main_mod.py --train False --ckpt_name last --testing_method unsupervised --AE True \
+     --encoder BLT --decoder BLT --freeze_decoder False --z_dim_bern 24 --z_dim_gauss 0  \
+     --optim_type Adam  --lr 1e-3 --batch_size 100 \
+     --max_epoch 100 --gather_step 500 --display_step 20 --save_step 5000 \
+     --dset_dir /home/riccardo/Desktop/Data/100k_2digt_BWE_2/digts/ \
+     --output_dir /home/riccardo/Desktop/Experiments/AE/Unfrozen/2_digts/BLT_BLT_depth_zdim24_2 \
+```
+
+Details of what each argument means can be found in the **main_mod.py** file within run_files. 
+
 
 
