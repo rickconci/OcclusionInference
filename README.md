@@ -106,7 +106,17 @@ python main_mod.py --train False --ckpt_name last --testing_method unsupervised 
      --output_dir /home/riccardo/Desktop/Experiments/AE/Unfrozen/2_digts/BLT_BLT_depth_zdim24_2 \
 ```
 
-Details of what each argument means can be found in the **main_mod.py** file within run_files. 
+The network can be set to train or test mode using the "--train" argument. It then looks within the "--output_dir/checkpoints" folder for checkpoint named the same as "--ckpt_name". If found, it will load that checkpoint and train/test using those parameters.
+
+As the network trains on the data found in "--dset_dir", every "--display_step" iterations, the training and testing loss is shown along side other variables depending on the task. At each "--gather_step", task-specific data is collected to then be plotted once the training has finished. In "--save_step", the network parameters are saved, and, depending on the task, testing plots are generated and saved in the "--output_dir".  Training goes on for "--max_epoch" number of epochs. 
+
+The "--testing_method" allows one to specify whether the task is supervised, in which case whether an "supervised_encoder" or "supervised_decoder" is used; or "unsupervised", in which case either a normal Autoencoder or a Variational Autoencoder can be used (set by "--AE" = T or F). The VAE can itself be adapted to encode gaussian units or bernoulli or both, set by the number in "--z_dim_gauss" and "--z_dim_bern". 
+
+In the supervised cases, the representation used can be changed to five differet options, using the '--encoder_target_type' argument. The most common one is the "depth_ordered_one_hot_xy" that can be used for all tasks other than the decoder with the solid2 dataset, as that requires the "depth_black_white_xy_xy" encoding as input. The choice of repreestation will also affect the size of the code ("--z_dim"), however, this is taken care of within the solver code. 
+
+The model itself can be specified using the "--encoder", "--decoder", "--n_filter 32" "--n_rep 4" "--kernel_size 4" and "--padding 1" arguments. The training itself can be controlled by the --optim_type",   "--lr", and "--batch_size". 
+
+Details of what each argument means can also be found in the **main_mod.py** file within run_files. 
 
 
 
