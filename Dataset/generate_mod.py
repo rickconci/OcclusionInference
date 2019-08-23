@@ -112,7 +112,11 @@ def sample_clutter(**kwargs):
     generalisation_set = kwargs.get('generalisation_set', False)
     hidden_traverse = kwargs.get('hidden_traverse', False)
    
-    pairings = {'2':'3', '3':'2', '0':'7', '7':'0', '1':'6', '6':'1', '4':'9', '9':'4', '5':'8', '8':'5'}
+    #for test set
+    #pairings = {'2':'3', '3':'2', '0':'7', '7':'0', '1':'6', '6':'1', '4':'9', '9':'4', '5':'8', '8':'5'}
+    
+    #for validation set
+    pairings = {'2':'7', '7':'2', '0':'3', '3':'0', '1':'9', '9':'1', '4':'6', '6':'4', '5':'8', '8':'5'}
    
     character_set = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']
     characters=[]
