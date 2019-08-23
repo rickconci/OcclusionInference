@@ -9,6 +9,8 @@ from torch.utils.data import Dataset, DataLoader
 import operator
 
 
+output_dir = "/home/riccardo/Desktop/Experiments/Scatter_Plots_Decoders"
+
 sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 from models.BLT_models import multi_VAE, SB_decoder, spatial_broadcast_decoder
 from data_loaders.dataset_sup import MyDataset_encoder, MyDataset_decoder
@@ -180,6 +182,15 @@ for i,j in list(comb):
     mat1 = Response_matrices[i]
     mat2 = Response_matrices[j]
     name = model_names[i]+"~"+ model_names[j]
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1, axisbg="1.0")
+    ax.scatter(mat1, mat2)
+    plt.gca().set_aspect('equal', adjustable='box')
+    plt.xlabel(model_names[i])
+    plt.ylabel(model_names[j])
+    plt.title(name + "Reconstruction errors")
+    plt.savefig(output_dir"/{}".format(name))
     
         
     diff_vector = mat1 - mat2

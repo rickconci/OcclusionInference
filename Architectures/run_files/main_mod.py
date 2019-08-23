@@ -78,7 +78,7 @@ if __name__ == "__main__":
         
     parser.add_argument('--optim_type', default='Adam', type=str, help='type of optimiser')
     parser.add_argument('--lr', default=1e-3, type=float, help='learning rate')
-    parser.add_argument('--l2_loss', default=0.0005, type=float, help='L2 loss coefficient')
+    parser.add_argument('--l2_loss', default=0.0, type=float, help='L2 loss coefficient')
     parser.add_argument('--beta1', default=0.9, type=float, help='Adam optimizer beta1')
     parser.add_argument('--beta2', default=0.999, type=float, help='Adam optimizer beta2')
     

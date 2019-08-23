@@ -121,6 +121,17 @@ class Solver_sup(object):
         self.net = net.to(self.device) 
         print("net on cuda: " + str(next(self.net.parameters()).is_cuda))
         
+           
+        if self.testing_method == 'supervised_encoder':
+            self.train_dl, self.gnrl_dl  = return_data_sup_encoder(args)
+        elif self.testing_method == 'supervised_decoder':
+            self.train_dl, self.gnrl_dl , self.gnrl_data =  return_data_sup_decoder(args)
+        else:
+            raise NotImplementedError    
+
+          
+        
+        
         self.lr = args.lr
         self.l2_loss = args.l2_loss
         self.beta1 = args.beta1
@@ -128,15 +139,7 @@ class Solver_sup(object):
         if args.optim_type =='Adam':
             self.optim = optim.Adam(self.net.parameters(), lr=self.lr, betas=(self.beta1, self.beta2))
         elif args.optim_type =='SGD':
-            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)
-        
-        if self.testing_method == 'supervised_encoder':
-             self.train_dl, self.gnrl_dl  = return_data_sup_encoder(args)
-        elif self.testing_method == 'supervised_decoder':
-            self.train_dl, self.gnrl_dl , self.gnrl_data =  return_data_sup_decoder(args)
-        else:
-            raise NotImplementedError    
-        
+            self.optim = optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9)    
         self.max_epoch = args.max_epoch
         self.global_iter = 0
         self.max_epoch = args.max_epoch
@@ -144,7 +147,9 @@ class Solver_sup(object):
         self.gather_step = args.gather_step
         self.display_step = args.display_step
         self.save_step = args.save_step
-          
+        
+            
+            
         self.image_size = args.image_size
 
         self.viz_name = args.viz_name
@@ -189,6 +194,7 @@ class Solver_sup(object):
         print(iters_per_epoch, 'iters per epoch')
         max_iter = self.max_epoch*iters_per_epoch
         batch_size = self.train_dl.batch_size
+        oldgnrlLoss = Inf
         
         count = 0
         out = False
@@ -218,21 +224,22 @@ class Solver_sup(object):
                     loss_list = [round(x.item(),3) for x in loss_list]
                 
                 self.adjust_learning_rate(self.optim, (count/iters_per_epoch))
+                
                 self.optim.zero_grad()
                 loss.backward()
                 self.optim.step()
                 
                 count +=1 
-            
+                
             
                 if self.global_iter%self.gather_step == 0:
-                    self.gnrl_loss()
+                    gnrlLoss = self.gnrl_loss()
                   
                     if self.testing_method =='supervised_encoder': 
                         
                         if self.encoder_target_type== 'joint':
                             self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
-                                               gnrl_loss = self.gnrlLoss,
+                                               gnrl_loss = gnrlLoss,
                                                train_accuracy = train_accuracy,
                                                 gnrl_accuracy = self.accuracy)
                         elif self.encoder_target_type== "depth_black_white" or self.encoder_target_type== "depth_black_white_xy_xy":
@@ -241,7 +248,7 @@ class Solver_sup(object):
                             train_black_accuracy = accuracy_list[1]
                             train_white_accuracy = accuracy_list[2]
                             self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
-                                               gnrl_loss = self.gnrlLoss,
+                                               gnrl_loss = gnrlLoss,
                                                train_depth_accuracy = train_depth_accuracy,
                                                train_black_accuracy = train_black_accuracy,
                                                train_white_accuracy= train_white_accuracy,
@@ -258,7 +265,7 @@ class Solver_sup(object):
                                 train_back_accuracy = accuracy_list[0]
                                 train_front_accuracy = accuracy_list[1]
                                 self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
-                                                   gnrl_loss = self.gnrlLoss,
+                                                   gnrl_loss = gnrlLoss,
                                                    l2_reg_loss = train_l2_reg_loss.item(),
                                                    
                                                    train_back_accuracy = train_back_accuracy,
@@ -283,7 +290,7 @@ class Solver_sup(object):
                                 train_mid_accuracy = accuracy_list[1]
                                 train_front_accuracy = accuracy_list[2]
                                 self.gather.insert(iter=self.global_iter, train_loss=loss.data.item(), 
-                                                   gnrl_loss = self.gnrlLoss,
+                                                   gnrl_loss = gnrlLoss,
                                                    l2_reg_loss = train_l2_reg_loss,
                                                    
                                                    train_back_accuracy = train_back_accuracy,
@@ -307,19 +314,19 @@ class Solver_sup(object):
                                                    
                                                   )
                                 with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                                    myfile.write('\n[{}] train_loss:{:.3f}, gnrl_loss:{:.3f}'.format(self.global_iter,loss.data.item(), self.gnrlLoss))
+                                    myfile.write('\n[{}] train_loss:{:.3f}, gnrl_loss:{:.3f}'.format(self.global_iter,loss.data.item(), gnrlLoss))
                             
                         
                         
                     elif self.testing_method =='supervised_decoder':
                         if self.decoder =='B':
-                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = self.gnrlLoss)
+                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = gnrlLoss)
                             with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                                myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}'.format(self.global_iter, loss.item(), self.gnrlLoss))
+                                myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}'.format(self.global_iter, loss.item(), gnrlLoss))
                         else:
-                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = self.gnrlLoss, train_recon_last_iter_loss=loss_list[-2], gnrl_total_last_iter_loss= self.gnrl_total_last_iter_loss)
+                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = gnrlLoss, train_recon_last_iter_loss=loss_list[-2], gnrl_total_last_iter_loss= self.gnrl_total_last_iter_loss)
                             with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
-                                myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}, {}'.format(self.global_iter, torch.mean(loss), self.gnrlLoss,loss_list))
+                                myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}, {}'.format(self.global_iter, torch.mean(loss), gnrlLoss,loss_list))
                 
                 
                 if self.global_iter%self.display_step == 0:
@@ -358,10 +365,10 @@ class Solver_sup(object):
                     self.save_checkpoint('last') 
                     
                     if self.gnrl_dl != 0:
-                        oldgnrlLoss = self.gnrlLoss
-                        self.gnrl_loss()
-                        print('old gnrl loss', oldgnrlLoss,'current gnrl loss', self.gnrlLoss )
-                        if self.gnrlLoss < oldgnrlLoss:
+                        gnrlLoss = self.gnrl_loss()
+                        print('old gnrl loss', oldgnrlLoss,'current gnrl loss', gnrlLoss )
+                        if gnrlLoss < oldgnrlLoss:
+                            oldgnrlLoss = gnrlLoss
                             self.save_checkpoint('best_gnrl')
                             pbar.write('Saved best GNRL checkpoint(iter:{})'.format(self.global_iter))
                     
@@ -397,7 +404,7 @@ class Solver_sup(object):
                 final_loss_list = supervised_encoder_loss(final_out_list[i], y, self.n_digits, self.encoder_target_type)
                 #if self.global_iter%self.display_step == 0:
                 #    print('iter {}'.format(i), [x.item() for x in final_loss_list])
-                loss += final_loss_list[0]
+                loss = final_loss_list[0]  #no more composite loss
                 
             l2 = 0
             for p in self.net.parameters():
@@ -414,7 +421,7 @@ class Solver_sup(object):
             loss = 0.0
             for i in range(len(recon_list)):
                 loss_list.append(supervised_decoder_loss(y, recon_list[i]))
-                loss += supervised_decoder_loss(y, recon_list[i])
+                loss = supervised_decoder_loss(y, recon_list[i]) #no more composite loss
             l2 = 0
             for p in self.net.parameters():
                 l2 = l2 + p.pow(2).sum() #*0.5
@@ -497,9 +504,9 @@ class Solver_sup(object):
                 cnt += 1
                 
         gnrlLoss = gnrlLoss.div(cnt)
-        self.gnrlLoss = gnrlLoss.cpu().item()
+        gnrlLoss = gnrlLoss.cpu().item()
         self.gnrl_l2_loss = gnrl_l2_loss/cnt
-        print('[{}] all iters gnrl_Loss:{:.3f}, l2_loss{:.3f}'.format(self.global_iter, self.gnrlLoss, self.gnrl_l2_loss))
+        print('[{}] all iters gnrl_Loss:{:.3f}, l2_loss{:.3f}'.format(self.global_iter, gnrlLoss, self.gnrl_l2_loss))
         
         if self.testing_method =='supervised_decoder':
             self.gnrl_total_last_iter_loss = gnrl_total_last_iter_loss/cnt
@@ -539,7 +546,7 @@ class Solver_sup(object):
                                                                                                                         self.gnrl_back_loss,self.gnrl_mid_loss, self.gnrl_front_loss, self.gnrl_xy_loss))
                     print('[{}] gnrl_back_accuracy:{:.3f}, gnrl_mid_accuracy:{:.3f}, gnrl_front_accuracy:{:.3f}'.format(self.global_iter, self.gnrl_back_accuracy, self.gnrl_mid_accuracy,self.gnrl_front_accuracy))
 
-        return(self.gnrlLoss)
+        return(gnrlLoss)
 
     def test_images(self):
         net_copy = deepcopy(self.net)
@@ -548,6 +555,8 @@ class Solver_sup(object):
         with torch.no_grad():
             print('Reconstructing gnrl Images!')
             plot_decoder_img(net_copy, self.gnrl_data, self.output_dir, self.global_iter, self.sbd, type="gnrl", n=20 )
+            
+        
 
         
     
