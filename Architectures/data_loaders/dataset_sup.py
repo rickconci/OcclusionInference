@@ -404,7 +404,14 @@ def return_data_sup_decoder(args):
     image_size = args.image_size
     assert image_size == 32
     encoder_target_type = args.encoder_target_type
-
+    
+    
+    data_csv = "{}digts.csv".format(dset_dir)
+    data = pd.read_csv(data_csv, header=None)
+    if  data.shape[1] > 37:
+        n_digits =3
+    elif data.shape[1] <= 37:
+        n_digits = 2
     
     x_train_paths = "{}digts.csv".format(dset_dir)
     y_train_paths = "{}train/orig/".format(dset_dir) 
@@ -434,10 +441,15 @@ def return_data_sup_decoder(args):
                               pin_memory=True,
                             drop_last=False)
    
-
-    x_gnrl_paths = "{}digts_gnrl.csv".format(dset_dir)
-    y_gnrl_paths = os.path.join(dset_dir + "gnrl/orig/")
     
+    if n_digits ==2:
+        x_gnrl_paths = "{}digts_gnrl.csv".format('/home/riccardo/Desktop/Data/validation_border2/digts/')
+        y_gnrl_paths = '/home/riccardo/Desktop/Data/validation_border2/digts/gnrl/orig/'
+    elif n_digits ==3:
+        x_gnrl_paths = "{}digts_gnrl.csv".format('/home/riccardo/Desktop/Data/validation_border3/digts/')
+        y_gnrl_paths = '/home/riccardo/Desktop/Data/validation_border3/digts/gnrl/orig/'
+        
+        
     if os.path.exists(y_gnrl_paths):
         
         dset_gnrl = MyDataset_decoder
@@ -456,7 +468,7 @@ def return_data_sup_decoder(args):
                                   drop_last=False)
     
         gnrl_data_size = len(os.listdir(y_gnrl_paths))
-        
+        print("Validation set: {}".format(y_gnrl_paths))
         print('{} train images,  {} generalisation images"'.format(
             train_data_size, gnrl_data_size))
     else:

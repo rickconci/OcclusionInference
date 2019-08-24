@@ -178,8 +178,8 @@ def supervised_decoder_loss(img, recon):
     #reconstruction loss for GAUSSIAN distribution of pixel values (not Bernoulli)
     batch_size = recon.size(0)
     assert batch_size != 0
-    print(recon.shape)
+    #print(recon.shape)
     recon = torch.sigmoid(recon)
     recon_loss = F.mse_loss(recon, img,  reduction='sum').div(batch_size) #divide mse loss by batch size
-    print(recon_loss.shape)
+    #print(recon_loss.shape)
     return recon_loss
