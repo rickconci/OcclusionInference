@@ -194,7 +194,7 @@ class Solver_sup(object):
         print(iters_per_epoch, 'iters per epoch')
         max_iter = self.max_epoch*iters_per_epoch
         batch_size = self.train_dl.batch_size
-        oldgnrlLoss = Inf
+        oldgnrlLoss = math.inf
         
         count = 0
         out = False
@@ -324,7 +324,7 @@ class Solver_sup(object):
                             with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
                                 myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}'.format(self.global_iter, loss.item(), gnrlLoss))
                         else:
-                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = gnrlLoss, train_recon_last_iter_loss=loss_list[-2], gnrl_total_last_iter_loss= self.gnrl_total_last_iter_loss)
+                            self.gather.insert(iter=self.global_iter, train_recon_loss = loss.item(), gnrl_recon_loss = gnrlLoss, train_recon_last_iter_loss=loss_list[-1], gnrl_total_last_iter_loss= self.gnrl_total_last_iter_loss)
                             with open("{}/LOGBOOK.txt".format(self.output_dir), "a") as myfile:
                                 myfile.write('\n[{}] train_recon_loss:{:.3f}, gnrl_recon_loss:{:.3f}, {}'.format(self.global_iter, torch.mean(loss), gnrlLoss,loss_list))
                 
