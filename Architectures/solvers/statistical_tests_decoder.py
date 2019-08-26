@@ -7,14 +7,16 @@ import os
 from scipy import stats
 from torch.utils.data import Dataset, DataLoader
 import operator
-
+import matplotlib.pyplot as plt
+import math
+import pickle
 
 output_dir = "/home/riccardo/Desktop/Experiments/Scatter_Plots_Decoders"
 
 sys.path.insert(0, '/home/riccardo/Desktop/OcclusionInference/Architectures')
 from models.BLT_models import multi_VAE, SB_decoder, spatial_broadcast_decoder
 from data_loaders.dataset_sup import MyDataset_encoder, MyDataset_decoder
-
+from solvers.losses import supervised_decoder_loss
 
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.deterministic = True
@@ -25,8 +27,8 @@ torch.manual_seed(seed)
 torch.cuda.manual_seed(seed)
 np.random.seed(seed)
 
-%load_ext autoreload
-%autoreload 2
+#%load_ext autoreload
+#%autoreload 2
 
 print("CREATING DATASET DICTIONARIES")
 
@@ -101,7 +103,7 @@ encoding_target_type = "depth_ordered_one_hot_xy"
 print("datasets:", datasets )
 print("nets:", nets)
 print("n_digits:", n_digits)
-print("encoding_target_type:" encoding_target_type)
+print("encoding_target_type:", encoding_target_type)
 
 
 
@@ -145,7 +147,7 @@ for dataset in datasets:
     
     for model in nets:
         model_names.append(model['name'])
-        responses = torch.zeros( len(gnrl_data), 3)
+        responses = torch.zeros( len(gnrl_data), 1)
         print(model['name'])
         net_1 = multi_VAE(model['encoder'],model['decoder'],zdim , 0 ,model['n_filter'] , 1, 4, False, model['kernel_size'], model['padding'], False)
         checkpoint = torch.load(model['filename'])
@@ -158,19 +160,19 @@ for dataset in datasets:
                 x = sample['x'].to(device)
                 trgt = sample['y'].to(device)
                 
-                output_1_list = net_1._encode(x)
+                output_1_list = net_1._decode(x)
                 output_1 = output_1_list[-1]
+                losses_1 = F.mse_loss(output_1, trgt)
+                print(losses_1)
                 
-                output_2_list = net_2._encode(x)
-                output_2 = output_2_list[-1]
-                
-                
-                responses[500*(count-1):500*(count), 0] = output_1[:,0]
-                responses[500*(count-1):500*(count), 1] = output_2[:,0]
+                responses[500*(count-1):500*(count), 0] = losses_1[:,0]
                     
                 #print(torch.sum(responses[:,0]))
                 
         Response_matrices.append(responses)
+        
+pickle.dump( Response_matrices, open( "{}/Response_matrices.p".format(output_dir), "wb" ) )
+
         
 print("CALCULATING T VALUE AND P VALUE")
         
@@ -183,25 +185,42 @@ for i,j in list(comb):
     mat2 = Response_matrices[j]
     name = model_names[i]+"~"+ model_names[j]
     
-    fig = plt.figure()
-    ax = fig.add_subplot(1, 1, 1, axisbg="1.0")
-    ax.scatter(mat1, mat2)
-    plt.gca().set_aspect('equal', adjustable='box')
-    plt.xlabel(model_names[i])
-    plt.ylabel(model_names[j])
-    plt.title(name + "Reconstruction errors")
-    plt.savefig(output_dir"/{}".format(name))
+    x_mean = float(torch.mean(mat1))
+    y_mean = float(torch.mean(mat2))
     
-        
+    fig = plt.figure()
+    ax = fig.add_subplot(1, 1, 1)
+    ax.scatter(mat1, mat2 ,s=0.1, c='black')
+    ax.set_ylim(0,200)
+    ax.set_xlim(0,200)
+    ax.set_aspect('equal')
+    ax.scatter(x_mean, y_mean, s=5, c='red')
+    ax.plot([x_mean, x_mean],[y_mean, 0], 'm--',  linewidth=2 )
+    ax.plot([0, x_mean],[y_mean, y_mean], 'b--',  linewidth=2 )
+    ax.plot(ax.get_xlim(), ax.get_ylim(), ls="--", c=".3")
+    
     diff_vector = mat1 - mat2
-    diff_mean = torch.mean(diff_vector)
-    standard_dev = diff.std(dim=1)
-    standard_error = standard_dev/math.sqrt(2)
+    diff_mean = float(torch.mean(diff_vector))
+    standard_dev = diff_vector.std(dim=0)
+    standard_error = float(standard_dev/math.sqrt(2))
     t_test =   diff_mean/standard_error 
     t_test = float(t_test)
     p_value = stats.t.sf(np.abs(t_test), 1)*2
 
     p_list[name] = p_value
-
+    
+    ax.text(90, 180, 'diff_mean: {}'.format( np.round(diff_mean,2) ), fontsize=7)
+    ax.text(90, 170, 'standard_error: {}'.format(np.round(standard_error,2)), fontsize=7)
+    ax.text(90, 160, 't_stat: {}'.format(np.round(t_test,3)), fontsize=7)
+    ax.text(90, 150, 'p_value: {}'.format(np.round(p_value,4)), fontsize=7)
+    
+    ax.text(90, 140, 'x_mean: {}'.format(np.round(x_mean,2)), fontsize=7, color='m')
+    ax.text(90,130 , 'y_mean: {}'.format(np.round(y_mean,2)), fontsize=7, color='b')
+    
+    plt.xlabel(model_names[i])
+    plt.ylabel(model_names[j])
+    plt.title(name + "\n Reconstruction errors")
+    plt.savefig("{}/{}".format(output_dir, name))
+    
 sorted_p_list = sorted(p_list.items(), key=operator.itemgetter(1))
 print(sorted_p_list)

@@ -53,7 +53,7 @@ class multi_encoder(nn.Module):
         for block in self._modules.values():
             #print(block)
             if isinstance(block, (nn.Linear, nn.Conv2d)):
-                init.kaiming_normal(block.weight,  nonlinearity='relu')
+                nn.init.kaiming_normal_(block.weight,  nonlinearity='relu')
                 if block.bias is not None:
                     block.bias.data.fill_(0)
     
@@ -144,7 +144,7 @@ class multi_decoder(nn.Module):
         for block in self._modules.values():
             #print(block)
             if isinstance(block, (nn.Linear, nn.Conv2d)):
-                init.kaiming_normal(block.weight,  nonlinearity='relu')
+                nn.init.kaiming_normal_(block.weight,  nonlinearity='relu')
                 if block.bias is not None:
                     block.bias.data.fill_(0)
             
