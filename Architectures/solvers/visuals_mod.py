@@ -370,7 +370,7 @@ def plotLearningCurves(solver):
         
         if not solver.gather.data['train_recon_last_iter_loss']:
             fig_lc = plt.figure(figsize = (8,8))
-            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \Min training loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nMin training loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
                                solver.params, np.min(solver.gather.data['train_recon_loss']),
                              np.min(solver.gather.data['gnrl_recon_loss'])), fontsize=14)
 

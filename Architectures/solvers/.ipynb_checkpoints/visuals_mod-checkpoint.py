@@ -39,6 +39,7 @@ def traverse_z(NN, example_id, ID, output_dir, global_iter, sbd ,num_frames = 10
     
     #encode a sample image
     z_distributions = NN._encode(x_test_sample)
+    z_distributions = z_distributions[-1]
     if NN.z_dim_bern == 0:
         z_sample = z_distributions[:, :NN.z_dim_gauss]
     elif NN.z_dim_gauss == 0:
@@ -369,7 +370,7 @@ def plotLearningCurves(solver):
         
         if not solver.gather.data['train_recon_last_iter_loss']:
             fig_lc = plt.figure(figsize = (8,8))
-            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \Min training loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
+            fig_lc.suptitle('Learning curves \nNumber of trainable parameters: {}, \nMin training loss: {:.3f} , Final gnrl loss: {:.3f} '.format(
                                solver.params, np.min(solver.gather.data['train_recon_loss']),
                              np.min(solver.gather.data['gnrl_recon_loss'])), fontsize=14)
 

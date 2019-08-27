@@ -78,12 +78,12 @@ BLT_encoder_border3  = {'name' : 'BLT_encoder_border3','encoder':'BLT' , 'decode
 # BLT_decoder_solid2 = {'encoder': 'B', 'decoder':'BLT' , 'n_filter': 32,  'kernel_size': 4, 'padding': 1, 'filename': }
 
 
-
-B_decoder_border2 = {'name' : 'B_decoder_border2','encoder': 'B', 'decoder':'B' , 'n_filter': 32,  'kernel_size': 4, 'padding':1 , 'filename': '/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/arch/B/main/last'}
-B_matched_decoder_border2 = {'name' : 'B_matched_decoder_border2','encoder':'B' , 'decoder': 'B', 'n_filter':35 ,  'kernel_size':6 , 'padding':2 , 'filename':'/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/arch/B_matched/main/last' }
-BL_decoder_border2 = {'name' : 'BL_decoder_border2','encoder': 'B', 'decoder':'BL' , 'n_filter': 32,  'kernel_size':4 , 'padding':1 , 'filename': '/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/arch/BL/main/last'}
-BT_decoder_border2 = {'name' : 'BT_decoder_border2','encoder':'B' , 'decoder':'BT' , 'n_filter': 32,  'kernel_size': 4, 'padding':1 , 'filename':'/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/arch/BT/main/last' }
-BLT_decoder_border2 = {'name' : 'BLT_decoder_border2','encoder': 'B', 'decoder':'BLT' , 'n_filter': 32,  'kernel_size': 4, 'padding': 1, 'filename': '/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/arch/BLT/main/last'}
+#comp loss w/ L2
+B_decoder_border2 = {'name' : 'B_decoder_border2','encoder': 'B', 'decoder':'B' , 'n_filter': 32,  'kernel_size': 4, 'padding':1 , 'filename': '/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/loss_w_comp/B_lr_0_001/main/best_gnrl'}
+B_matched_decoder_border2 = {'name' : 'B_matched_decoder_border2','encoder':'B' , 'decoder': 'B', 'n_filter':35 ,  'kernel_size':6 , 'padding':2 , 'filename':'/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/loss_w_comp/B_matched_lr_0_005/main/best_gnrl' }
+BL_decoder_border2 = {'name' : 'BL_decoder_border2','encoder': 'B', 'decoder':'BL' , 'n_filter': 32,  'kernel_size':4 , 'padding':1 , 'filename': '/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/loss_w_comp/BL_lr_0_005/main/best_gnrl'}
+BT_decoder_border2 = {'name' : 'BT_decoder_border2','encoder':'B' , 'decoder':'BT' , 'n_filter': 32,  'kernel_size': 4, 'padding':1 , 'filename':'//home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/loss_w_comp/BT_lr_0_005/main/best_gnrl' }
+BLT_decoder_border2 = {'name' : 'BLT_decoder_border2','encoder': 'B', 'decoder':'BLT' , 'n_filter': 32,  'kernel_size': 4, 'padding': 1, 'filename': '/home/riccardo/Desktop/Experiments/decoder_sup/2_digts/bwe/loss_w_comp/BLT_lr_0_005/main/best_gnrl'}
 
 
 

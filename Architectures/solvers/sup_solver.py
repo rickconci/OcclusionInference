@@ -404,7 +404,7 @@ class Solver_sup(object):
                 final_loss_list = supervised_encoder_loss(final_out_list[i], y, self.n_digits, self.encoder_target_type)
                 #if self.global_iter%self.display_step == 0:
                 #    print('iter {}'.format(i), [x.item() for x in final_loss_list])
-                loss = final_loss_list[0]  #no more composite loss
+                loss += final_loss_list[0]  #no more composite loss
                 
             l2 = 0
             for p in self.net.parameters():
@@ -421,7 +421,7 @@ class Solver_sup(object):
             loss = 0.0
             for i in range(len(recon_list)):
                 loss_list.append(supervised_decoder_loss(y, recon_list[i]))
-                loss = supervised_decoder_loss(y, recon_list[i]) #no more composite loss
+                loss += supervised_decoder_loss(y, recon_list[i]) #no more composite loss
             l2 = 0
             for p in self.net.parameters():
                 l2 = l2 + p.pow(2).sum() #*0.5
