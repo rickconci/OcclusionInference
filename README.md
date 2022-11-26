@@ -6,8 +6,9 @@ This repository contains the code for the my MPhil Thesis in Computational Biolo
 Applied Mathematics and Theretical Physics, University of Cambidge, in August 2019. 
 
 
-In this thesis I test the hypothesis I investigate the role of recurrent connections in inference and graphics by building
+In this thesis I investigate the role of recurrent connections in inference and graphics by building
 different artificial neural network models, and training and testing them on three tasks:
+
 1) To infer depth, object identity and location from images with occlusions. This is called the **inference task**.
 2) To generate images with occlusions from pre-set representations of the objects in the images. This is called the  **graphics task**. 
 3) Finally, I train a network that combines the two tasks into one, from images to a compressed representation and then back, 
